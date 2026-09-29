@@ -1,6 +1,6 @@
 # ml_engine/models/naive_bayes.py
-from sklearn.naive_bayes import GaussianNB
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.naive_bayes import GaussianNB
 
 
 class GaussianNBModel(BaseEstimator, ClassifierMixin):

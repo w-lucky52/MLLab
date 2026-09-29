@@ -1,7 +1,7 @@
 # ml_engine/datasets/base.py
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Optional, List, Any
+from dataclasses import dataclass
+
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -13,8 +13,8 @@ class DatasetData:
     X: np.ndarray
     y: np.ndarray
     task_type: str  # "classification" / "regression"
-    feature_names: Optional[List[str]] = None
-    target_names: Optional[List[str]] = None
+    feature_names: list[str] | None = None
+    target_names: list[str] | None = None
 
 
 class DatasetAdapter(ABC):

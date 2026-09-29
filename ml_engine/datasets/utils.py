@@ -1,9 +1,11 @@
 # ml_engine/datasets/utils.py
-import pandas as pd
-import numpy as np
-from typing import Dict, Any
+from typing import Any
 
-def parse_csv(file_path: str) -> Dict[str, Any]:
+import numpy as np
+import pandas as pd
+
+
+def parse_csv(file_path: str) -> dict[str, Any]:
     df = pd.read_csv(file_path)
     columns = list(df.columns)
     dtypes = {col: str(df[col].dtype) for col in df.columns}

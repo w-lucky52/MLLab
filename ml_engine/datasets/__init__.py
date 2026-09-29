@@ -1,7 +1,12 @@
 # ml_engine/datasets/__init__.py
-from .base import DatasetAdapter, DatasetData, split_dataset
+from .base import DatasetAdapter
+from .base import DatasetData as DatasetData
+from .base import split_dataset as split_dataset
 from .classification import (
-    BreastCancerAdapter, DigitsAdapter, IrisAdapter, WineAdapter,
+    BreastCancerAdapter,
+    DigitsAdapter,
+    IrisAdapter,
+    WineAdapter,
 )
 from .regression import DiabetesAdapter
 
