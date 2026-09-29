@@ -29,36 +29,20 @@ class DatasetAdapter(ABC):
         raise NotImplementedError
 
 
-def split_dataset(
-    data: DatasetData,
-    test_size: float = 0.3,
-    standardize: bool = True,
-    random_state: int = 42,
-):
-    """
-    防数据泄漏切分：
-    1. 先切分 train / test
-    2. 只在训练集上 fit Scaler
-    3. 只标准化 X，不动 y
-    4. 分类任务使用 stratify=y
-    """
+def split_dataset(X, y, test_size=0.3, random_state=42,
+                  task_type="classification", standardize=True):
     if test_size not in (0.2, 0.3, 0.4):
         raise ValueError(f"test_size 只能是 0.2/0.3/0.4，收到: {test_size}")
-
-    stratify = data.y if data.task_type == "classification" else None
-
+    
+    stratify = y if task_type == "classification" else None
+    
     X_train, X_test, y_train, y_test = train_test_split(
-        data.X,
-        data.y,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=stratify,
+        X, y, test_size=test_size, random_state=random_state, stratify=stratify
     )
-
-    scaler = None
+    
     if standardize:
         scaler = StandardScaler()
-        X_train = scaler.fit_transform(X_train)   # 只在训练集 fit
-        X_test = scaler.transform(X_test)          # 用训练集的参数变换测试集
-
-    return X_train, X_test, y_train, y_test, scaler
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+        
+    return X_train, X_test, y_train, y_test

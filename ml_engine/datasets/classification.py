@@ -1,4 +1,3 @@
-# ml_engine/datasets/classification.py
 from sklearn.datasets import load_iris, load_wine, load_breast_cancer, load_digits
 from .base import DatasetAdapter, DatasetData
 
@@ -11,11 +10,8 @@ class IrisAdapter(DatasetAdapter):
     def load(self) -> DatasetData:
         bunch = load_iris()
         return DatasetData(
-            X=bunch.data,
-            y=bunch.target,
-            task_type=self.task_type,
-            feature_names=list(bunch.feature_names),
-            target_names=list(bunch.target_names),
+            X=bunch.data, y=bunch.target, task_type=self.task_type,
+            feature_names=list(bunch.feature_names), target_names=list(bunch.target_names),
         )
 
 
@@ -27,11 +23,8 @@ class WineAdapter(DatasetAdapter):
     def load(self) -> DatasetData:
         bunch = load_wine()
         return DatasetData(
-            X=bunch.data,
-            y=bunch.target,
-            task_type=self.task_type,
-            feature_names=list(bunch.feature_names),
-            target_names=list(bunch.target_names),
+            X=bunch.data, y=bunch.target, task_type=self.task_type,
+            feature_names=list(bunch.feature_names), target_names=list(bunch.target_names),
         )
 
 
@@ -43,11 +36,8 @@ class BreastCancerAdapter(DatasetAdapter):
     def load(self) -> DatasetData:
         bunch = load_breast_cancer()
         return DatasetData(
-            X=bunch.data,
-            y=bunch.target,
-            task_type=self.task_type,
-            feature_names=list(bunch.feature_names),
-            target_names=list(bunch.target_names),
+            X=bunch.data, y=bunch.target, task_type=self.task_type,
+            feature_names=list(bunch.feature_names), target_names=list(bunch.target_names),
         )
 
 
@@ -59,9 +49,6 @@ class DigitsAdapter(DatasetAdapter):
     def load(self) -> DatasetData:
         bunch = load_digits()
         return DatasetData(
-            X=bunch.data,
-            y=bunch.target,
-            task_type=self.task_type,
-            feature_names=list(bunch.feature_names),
-            target_names=[str(i) for i in range(10)],
+            X=bunch.data, y=bunch.target, task_type=self.task_type,
+            feature_names=list(bunch.feature_names), target_names=[str(i) for i in range(10)],
         )

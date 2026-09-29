@@ -8,7 +8,12 @@ data = IrisAdapter().load()
 print("task_type:", data.task_type)
 print("X shape:", data.X.shape, "y shape:", data.y.shape)
 
-X_train, X_test, y_train, y_test, scaler = split_dataset(data, test_size=0.3)
+X_train, X_test, y_train, y_test = split_dataset(
+    data.X, 
+    data.y, 
+    test_size=0.3, 
+    task_type=data.task_type
+)
 
 for Model in [KNNModel, GaussianNBModel]:
     model = Model().fit(X_train, y_train)
@@ -26,11 +31,14 @@ print("X shape:", data_reg.X.shape, "y shape:", data_reg.y.shape)
 print("feature_names 数量:", len(data_reg.feature_names) if data_reg.feature_names else 0)
 
 # 2. 测试切分与防泄漏逻辑
-X_train_r, X_test_r, y_train_r, y_test_r, scaler_r = split_dataset(data_reg, test_size=0.3)
+X_train_r, X_test_r, y_train_r, y_test_r = split_dataset(
+    data_reg.X, 
+    data_reg.y, 
+    test_size=0.3, 
+    task_type=data_reg.task_type
+)
 print("切分完成 -> X_train:", X_train_r.shape, "X_test:", X_test_r.shape)
 
-# 3. 验证是否在训练集上 fit 了 Scaler
-print("scaler 是否已创建 (在训练集上fit):", scaler_r is not None)
 
 
 from ml_engine.datasets.utils import parse_csv
@@ -62,9 +70,22 @@ if os.path.exists(test_csv_path):
     os.remove(test_csv_path)
 
 
-from ml_engine.evaluation.classification import evaluate_classification
+from ml_engine.evaluation.classification import evaluate
+
 print("\n--- 测试分类评估模块 ---")
-eval_result = evaluate_classification(y_test, y_pred)
-print("metrics:", eval_result["metrics"])
-print("class_labels:", eval_result["class_labels"])
-print("confusion_matrix:", eval_result["confusion_matrix"])
+data_eval = IrisAdapter().load()
+# 注意这里调用方式变了，要传入 data.X 和 data.y
+X_train_e, X_test_e, y_train_e, y_test_e = split_dataset(
+    data_eval.X, data_eval.y, test_size=0.3, task_type=data_eval.task_type
+)
+
+knn_eval = KNNModel().fit(X_train_e, y_train_e)
+y_pred_e = knn_eval.predict(X_test_e)
+
+# 注意这里：传入 data_eval.target_names 来显示真实的类别名
+eval_result = evaluate(y_test_e, y_pred_e, class_labels=data_eval.target_names)
+print("评估指标:", eval_result["metrics"])
+print("类别标签:", eval_result["class_labels"])
+print("混淆矩阵:")
+for row in eval_result["confusion_matrix"]:
+    print(row)
