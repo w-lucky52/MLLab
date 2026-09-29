@@ -1,7 +1,6 @@
 # ml_engine/models/knn.py
-import numpy as np
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.neighbors import KNeighborsClassifier
 
 
 class KNNModel(BaseEstimator, ClassifierMixin):

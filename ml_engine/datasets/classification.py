@@ -1,4 +1,5 @@
-from sklearn.datasets import load_iris, load_wine, load_breast_cancer, load_digits
+from sklearn.datasets import load_breast_cancer, load_digits, load_iris, load_wine
+
 from .base import DatasetAdapter, DatasetData
 
 
