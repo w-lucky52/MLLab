@@ -7,7 +7,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 class KNNModel(BaseEstimator, ClassifierMixin):
     """KNN 分类器，包装 sklearn，统一接口 fit/predict"""
     # 参数元信息，供 D 的注册器读取，前端动态表单会用到
-        parameters_metadata = {
+    parameters_metadata = {
         "n_neighbors": {
             "label": "邻居数", 
             "type": "int", 

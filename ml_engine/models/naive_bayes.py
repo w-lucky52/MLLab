@@ -5,7 +5,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 
 class GaussianNBModel(BaseEstimator, ClassifierMixin):
     """高斯朴素贝叶斯分类器，统一接口 fit/predict"""
-        parameters_metadata = {
+    parameters_metadata = {
         "var_smoothing": {
             "label": "方差平滑", 
             "type": "float", 

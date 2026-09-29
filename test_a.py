@@ -60,3 +60,11 @@ except Exception as e:
 # 4. 清理临时文件
 if os.path.exists(test_csv_path):
     os.remove(test_csv_path)
+
+
+from ml_engine.evaluation.classification import evaluate_classification
+print("\n--- 测试分类评估模块 ---")
+eval_result = evaluate_classification(y_test, y_pred)
+print("metrics:", eval_result["metrics"])
+print("class_labels:", eval_result["class_labels"])
+print("confusion_matrix:", eval_result["confusion_matrix"])
