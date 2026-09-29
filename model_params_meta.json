@@ -56,21 +56,8 @@
           "label": "分裂候选特征数",
           "type": "select",
           "default": "sqrt",
-          "options": [
-            { "value": "sqrt", "label": "sqrt：特征数开平方（默认）" },
-            { "value": "log2", "label": "log2：特征数取以2为底的对数" },
-            { "value": null, "label": "全部特征（None，不做特征采样）" }
-          ],
+          "options": ["sqrt", "log2"],
           "description": "每次节点分裂时随机采样参与搜索的特征数；除下拉选项外，算法接口也支持正整数（直接指定个数）或 (0,1] 之间的浮点数（按比例）。null 对应 Python None。"
-        },
-        "random_state": {
-          "label": "随机种子",
-          "type": "int",
-          "default": null,
-          "min": 0,
-          "max": 2147483647,
-          "step": 1,
-          "description": "随机种子，固定后 bootstrap 抽样与特征采样结果可复现；null 表示不固定，每次运行结果随机。"
         }
       }
     },
@@ -106,15 +93,6 @@
           "max": 32,
           "step": 1,
           "description": "单棵残差回归树的最大深度；GBDT 的基学习器通常为浅树（默认3），配合小学习率逐步逼近。"
-        },
-        "random_state": {
-          "label": "随机种子",
-          "type": "int",
-          "default": null,
-          "min": 0,
-          "max": 2147483647,
-          "step": 1,
-          "description": "随机种子，仅为接口对齐而保留；平方损失下训练过程本身确定，该参数不影响结果；null 表示不固定。"
         }
       }
     }
