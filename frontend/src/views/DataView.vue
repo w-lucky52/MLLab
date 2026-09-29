@@ -16,7 +16,8 @@ const datasets = [
     description: '根据花萼和花瓣特征识别鸢尾花类别。',
     samples: 150,
     features: 4,
-    task: '多分类',
+    task: '分类',
+    taskType: 'classification',
     color: 'blue',
   },
   {
@@ -25,20 +26,41 @@ const datasets = [
     description: '根据化学成分特征识别葡萄酒类别。',
     samples: 178,
     features: 13,
-    task: '多分类',
+    task: '分类',
+    taskType: 'classification',
     color: 'purple',
   },
   {
     name: '乳腺癌数据集',
-    value: 'breast-cancer',
+    value: 'breast_cancer',
     description: '根据细胞特征判断肿瘤的良性与恶性。',
     samples: 569,
     features: 30,
-    task: '二分类',
+    task: '分类',
+    taskType: 'classification',
     color: 'green',
   },
+  {
+    name: '手写数字数据集',
+    value: 'digits',
+    description: '根据图像像素特征识别手写数字类别。',
+    samples: 1797,
+    features: 64,
+    task: '分类',
+    taskType: 'classification',
+    color: 'purple',
+  },
+  {
+    name: '糖尿病数据集',
+    value: 'diabetes',
+    description: '根据患者特征预测糖尿病进展情况。',
+    samples: 442,
+    features: 10,
+    task: '回归',
+    taskType: 'regression',
+    color: 'blue',
+  },
 ]
-
 const currentDataset = computed(() => {
   return datasets.find((item) => item.value === selectedDataset.value)
 })
@@ -48,16 +70,6 @@ const selectDataset = (dataset) => {
   fileName.value = ''
 }
 
-const handleFileChange = (uploadFile) => {
-  if (!uploadFile.name.toLowerCase().endsWith('.csv')) {
-    ElMessage.error('只能选择 CSV 格式的文件')
-    return
-  }
-
-  fileName.value = uploadFile.name
-  selectedDataset.value = ''
-  ElMessage.success(`已选择文件：${uploadFile.name}`)
-}
 
 const confirmDataset = () => {
   if (!selectedDataset.value && !fileName.value) {
@@ -145,24 +157,36 @@ const confirmDataset = () => {
     </div>
 
     <section class="upload-section">
-      <el-upload
-        drag
-        accept=".csv"
-        :auto-upload="false"
-        :limit="1"
-        :show-file-list="false"
-        :on-change="handleFileChange"
-      >
-        <el-icon class="upload-icon"><UploadFilled /></el-icon>
+  <el-alert
+    title="CSV 上传将在第二阶段开放"
+    description="第一阶段请使用上方 5 个内置数据集完成实验。"
+    type="info"
+    :closable="false"
+    show-icon
+    class="upload-alert"
+  />
 
-        <div class="upload-title">将 CSV 文件拖放到这里</div>
+  <el-upload
+    drag
+    disabled
+    accept=".csv"
+    :auto-upload="false"
+    :limit="1"
+    :show-file-list="false"
+  >
+    <el-icon class="upload-icon"><UploadFilled /></el-icon>
 
-        <div class="upload-description">或者点击选择本地文件，建议文件大小不超过 10 MB</div>
+    <div class="upload-title">CSV 数据集上传</div>
 
-        <el-button type="primary" plain> 选择 CSV 文件 </el-button>
-      </el-upload>
-    </section>
+    <div class="upload-description">
+      该功能暂未开放，将在第二阶段接入后端上传接口
+    </div>
 
+    <el-button type="primary" plain disabled>
+      第二阶段开放
+    </el-button>
+  </el-upload>
+</section>
     <el-card v-if="selectedDataset || fileName" class="selected-panel" shadow="never">
       <div class="selected-information">
         <div class="selected-file-icon">

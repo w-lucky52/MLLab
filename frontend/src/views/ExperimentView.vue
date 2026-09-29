@@ -8,61 +8,111 @@ const route = useRoute()
 const router = useRouter()
 
 const algorithm = ref('')
-const testSize = ref(0.2)
+const testSize = ref(0.3)
 const randomState = ref(42)
 
 const datasetNameMap = {
   iris: '鸢尾花数据集',
   wine: '葡萄酒数据集',
-  'breast-cancer': '乳腺癌数据集',
+  breast_cancer: '乳腺癌数据集',
+  digits: '手写数字数据集',
+  diabetes: '糖尿病数据集',
+}
+
+const datasetTaskTypeMap = {
+  iris: 'classification',
+  wine: 'classification',
+  breast_cancer: 'classification',
+  digits: 'classification',
+  diabetes: 'regression',
 }
 
 const algorithms = [
   {
-    value: 'knn',
+    value: 'knn_classifier',
     name: 'K 近邻',
     abbreviation: 'KNN',
-    description: '根据邻近样本的类别完成预测，简单直观。',
-    category: '基础分类',
+    description: '根据邻近样本的类别完成预测。',
+    category: '分类模型',
+    taskType: 'classification',
     color: 'blue',
   },
   {
-    value: 'gaussian-nb',
+    value: 'gaussian_nb',
     name: '高斯朴素贝叶斯',
     abbreviation: 'GNB',
-    description: '基于概率完成分类，训练速度快、效率高。',
-    category: '概率模型',
+    description: '基于概率完成分类，训练速度快。',
+    category: '分类模型',
+    taskType: 'classification',
     color: 'purple',
   },
   {
-    value: 'logistic-regression',
+    value: 'logistic_regression',
     name: '逻辑回归',
     abbreviation: 'LR',
     description: '经典线性分类模型，可解释性较强。',
-    category: '线性模型',
+    category: '分类模型',
+    taskType: 'classification',
     color: 'green',
   },
   {
-    value: 'decision-tree',
-    name: '决策树',
+    value: 'linear_regression',
+    name: '线性回归',
+    abbreviation: 'Linear',
+    description: '使用线性关系预测连续数值。',
+    category: '回归模型',
+    taskType: 'regression',
+    color: 'blue',
+  },
+  {
+    value: 'ridge_regression',
+    name: '岭回归',
+    abbreviation: 'Ridge',
+    description: '加入正则化的线性回归模型。',
+    category: '回归模型',
+    taskType: 'regression',
+    color: 'purple',
+  },
+  {
+    value: 'decision_tree_regressor',
+    name: '决策树回归',
     abbreviation: 'CART',
-    description: '通过树形结构完成判断，过程容易理解。',
-    category: '树模型',
+    description: '通过树形结构预测连续数值。',
+    category: '回归模型',
+    taskType: 'regression',
     color: 'orange',
   },
   {
-    value: 'random-forest',
-    name: '随机森林',
+    value: 'random_forest_regressor',
+    name: '随机森林回归',
     abbreviation: 'RF',
-    description: '组合多棵决策树，提高预测稳定性。',
-    category: '集成学习',
+    description: '组合多棵回归树提高预测稳定性。',
+    category: '回归模型',
+    taskType: 'regression',
     color: 'red',
+  },
+  {
+    value: 'gbdt_regressor',
+    name: '梯度提升树回归',
+    abbreviation: 'GBDT',
+    description: '逐步提升模型的回归预测能力。',
+    category: '回归模型',
+    taskType: 'regression',
+    color: 'green',
   },
 ]
 
 const currentDataset = computed(() => {
   const dataset = route.query.dataset
   return datasetNameMap[dataset] || dataset || '尚未选择数据集'
+})
+
+const currentTaskType = computed(() => {
+  return datasetTaskTypeMap[route.query.dataset]
+})
+
+const filteredAlgorithms = computed(() => {
+  return algorithms.filter((item) => item.taskType === currentTaskType.value)
 })
 
 const selectedAlgorithm = computed(() => {
@@ -157,7 +207,7 @@ const startExperiment = () => {
 
       <div class="algorithm-grid">
         <article
-          v-for="item in algorithms"
+          v-for="item in filteredAlgorithms"
           :key="item.value"
           :class="['algorithm-card', item.color, { selected: algorithm === item.value }]"
           @click="algorithm = item.value"
@@ -206,12 +256,12 @@ const startExperiment = () => {
             <strong>{{ Math.round(testSize * 100) }}%</strong>
           </div>
 
-          <el-slider v-model="testSize" :min="0.1" :max="0.5" :step="0.1" :show-tooltip="false" />
+          <el-slider v-model="testSize" :min="0.2" :max="0.4" :step="0.1" :show-tooltip="false" />
 
           <div class="slider-labels">
-            <span>10%</span>
+            <span>20%</span>
             <span>30%</span>
-            <span>50%</span>
+            <span>40%</span>
           </div>
         </el-card>
 

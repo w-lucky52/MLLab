@@ -30,15 +30,20 @@ let matrixChart = null
 const datasetNameMap = {
   iris: '鸢尾花数据集',
   wine: '葡萄酒数据集',
-  'breast-cancer': '乳腺癌数据集',
+  breast_cancer: '乳腺癌数据集',
+  digits: '手写数字数据集',
+  diabetes: '糖尿病数据集',
 }
 
 const algorithmNameMap = {
-  knn: 'K 近邻（KNN）',
-  'gaussian-nb': '高斯朴素贝叶斯',
-  'logistic-regression': '逻辑回归',
-  'decision-tree': '决策树（CART）',
-  'random-forest': '随机森林',
+  knn_classifier: 'K 近邻（KNN）',
+  gaussian_nb: '高斯朴素贝叶斯',
+  logistic_regression: '逻辑回归',
+  linear_regression: '线性回归',
+  ridge_regression: '岭回归',
+  decision_tree_regressor: '决策树回归（CART）',
+  random_forest_regressor: '随机森林回归',
+  gbdt_regressor: '梯度提升树回归（GBDT）',
 }
 
 const datasetName = computed(() => {
