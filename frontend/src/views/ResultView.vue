@@ -30,15 +30,20 @@ let matrixChart = null
 const datasetNameMap = {
   iris: '鸢尾花数据集',
   wine: '葡萄酒数据集',
-  'breast-cancer': '乳腺癌数据集',
+  breast_cancer: '乳腺癌数据集',
+  digits: '手写数字数据集',
+  diabetes: '糖尿病数据集',
 }
 
 const algorithmNameMap = {
-  knn: 'K 近邻（KNN）',
-  'gaussian-nb': '高斯朴素贝叶斯',
-  'logistic-regression': '逻辑回归',
-  'decision-tree': '决策树（CART）',
-  'random-forest': '随机森林',
+  knn_classifier: 'K 近邻（KNN）',
+  gaussian_nb: '高斯朴素贝叶斯',
+  logistic_regression: '逻辑回归',
+  linear_regression: '线性回归',
+  ridge_regression: '岭回归',
+  decision_tree_regressor: '决策树回归（CART）',
+  random_forest_regressor: '随机森林回归',
+  gbdt_regressor: '梯度提升树回归（GBDT）',
 }
 
 const datasetName = computed(() => {
@@ -57,32 +62,86 @@ const hasResult = computed(() => {
   return Boolean(route.query.dataset && route.query.algorithm)
 })
 
-const metrics = [
-  {
-    name: '准确率',
-    value: 94.67,
-    change: '+2.31%',
-    color: 'blue',
-  },
-  {
-    name: '精确率',
-    value: 94.31,
-    change: '+1.86%',
-    color: 'purple',
-  },
-  {
-    name: '召回率',
-    value: 93.85,
-    change: '+1.52%',
-    color: 'green',
-  },
-  {
-    name: 'F1 分数',
-    value: 94.08,
-    change: '+1.73%',
-    color: 'orange',
-  },
+const regressionAlgorithms = [
+  'linear_regression',
+  'ridge_regression',
+  'decision_tree_regressor',
+  'random_forest_regressor',
+  'gbdt_regressor',
 ]
+
+const isRegression = computed(() => {
+  return (
+    route.query.dataset === 'diabetes' ||
+    regressionAlgorithms.includes(String(route.query.algorithm || ''))
+  )
+})
+
+const metrics = computed(() => {
+  if (isRegression.value) {
+    return [
+      {
+        name: 'MAE',
+        value: 42.36,
+        change: '越低越好',
+        color: 'blue',
+        unit: '',
+      },
+      {
+        name: 'MSE',
+        value: 2856.42,
+        change: '越低越好',
+        color: 'purple',
+        unit: '',
+      },
+      {
+        name: 'RMSE',
+        value: 53.45,
+        change: '越低越好',
+        color: 'green',
+        unit: '',
+      },
+      {
+        name: 'R²',
+        value: 0.48,
+        change: '越高越好',
+        color: 'orange',
+        unit: '',
+      },
+    ]
+  }
+
+  return [
+    {
+      name: '准确率',
+      value: 94.67,
+      change: '+2.31%',
+      color: 'blue',
+      unit: '%',
+    },
+    {
+      name: '加权精确率',
+      value: 94.31,
+      change: '+1.86%',
+      color: 'purple',
+      unit: '%',
+    },
+    {
+      name: '加权召回率',
+      value: 93.85,
+      change: '+1.52%',
+      color: 'green',
+      unit: '%',
+    },
+    {
+      name: '加权 F1',
+      value: 94.08,
+      change: '+1.73%',
+      color: 'orange',
+      unit: '%',
+    },
+  ]
+})
 
 const initMetricChart = () => {
   if (!metricChartRef.value) return
@@ -100,11 +159,15 @@ const initMetricChart = () => {
     },
     tooltip: {
       trigger: 'axis',
-      formatter: '{b}<br/>{a}：{c}%',
+     formatter: (params) => {
+  const item = Array.isArray(params) ? params[0] : params
+  const unit = isRegression.value ? '' : '%'
+  return `${item.name}<br/>${item.seriesName}：${item.value}${unit}`
+},
     },
     xAxis: {
       type: 'category',
-      data: metrics.map((item) => item.name),
+      data: metrics.value.map((item) => item.name),
       axisTick: {
         show: false,
       },
@@ -117,26 +180,28 @@ const initMetricChart = () => {
         color: '#64748b',
       },
     },
-    yAxis: {
-      type: 'value',
-      min: 80,
-      max: 100,
-      axisLabel: {
-        color: '#94a3b8',
-        formatter: '{value}%',
-      },
-      splitLine: {
-        lineStyle: {
-          color: '#edf2f7',
-        },
-      },
+   yAxis: {
+  type: 'value',
+  min: isRegression.value ? 0 : 80,
+  max: isRegression.value ? null : 100,
+  axisLabel: {
+    color: '#94a3b8',
+    formatter: (value) => {
+      return isRegression.value ? value : `${value}%`
     },
+  },
+  splitLine: {
+    lineStyle: {
+      color: '#edf2f7',
+    },
+  },
+},
     series: [
       {
         name: '评估指标',
         type: 'bar',
         barWidth: 38,
-        data: metrics.map((item) => item.value),
+        data: metrics.value.map((item) => item.value),
         itemStyle: {
           borderRadius: [9, 9, 2, 2],
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -360,7 +425,7 @@ onBeforeUnmount(() => {
 
           <div class="metric-value">
             {{ metric.value }}
-            <small>%</small>
+         <small>{{ metric.unit }}</small>
           </div>
 
           <div class="metric-footer">
@@ -370,37 +435,48 @@ onBeforeUnmount(() => {
         </el-card>
       </section>
 
-      <section class="chart-grid">
-        <el-card class="chart-card metric-chart-card" shadow="never">
-          <template #header>
-            <div class="card-header">
-              <div>
-                <h3>模型评估指标</h3>
-                <p>各项分类指标的综合表现</p>
-              </div>
+     <section
+  class="chart-grid"
+  :class="{ 'single-chart': isRegression }"
+>
+  <el-card class="chart-card metric-chart-card" shadow="never">
+    <template #header>
+      <div class="card-header">
+        <div>
+          <h3>模型评估指标</h3>
+          <p>
+            {{ isRegression ? '各项回归指标的综合表现' : '各项分类指标的综合表现' }}
+          </p>
+        </div>
 
-              <el-tag effect="plain" round>百分比</el-tag>
-            </div>
-          </template>
+        <el-tag effect="plain" round>
+          {{ isRegression ? '回归结果' : '百分比' }}
+        </el-tag>
+      </div>
+    </template>
 
-          <div ref="metricChartRef" class="chart"></div>
-        </el-card>
+    <div ref="metricChartRef" class="chart"></div>
+  </el-card>
 
-        <el-card class="chart-card" shadow="never">
-          <template #header>
-            <div class="card-header">
-              <div>
-                <h3>混淆矩阵</h3>
-                <p>真实类别与预测类别的对应关系</p>
-              </div>
+  <el-card
+    v-if="!isRegression"
+    class="chart-card"
+    shadow="never"
+  >
+    <template #header>
+      <div class="card-header">
+        <div>
+          <h3>混淆矩阵</h3>
+          <p>真实类别与预测类别的对应关系</p>
+        </div>
 
-              <el-tag effect="plain" round>分类结果</el-tag>
-            </div>
-          </template>
+        <el-tag effect="plain" round>分类结果</el-tag>
+      </div>
+    </template>
 
-          <div ref="matrixChartRef" class="chart"></div>
-        </el-card>
-      </section>
+    <div ref="matrixChartRef" class="chart"></div>
+  </el-card>
+</section>
 
       <section class="analysis-card">
         <div class="analysis-icon">
@@ -681,6 +757,9 @@ onBeforeUnmount(() => {
   margin-top: 20px;
 }
 
+.chart-grid.single-chart {
+  grid-template-columns: 1fr;
+}
 .chart-card :deep(.el-card__header) {
   padding: 20px 22px;
 }
