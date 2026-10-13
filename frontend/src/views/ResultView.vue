@@ -1,12 +1,5 @@
 <script setup>
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
@@ -47,15 +40,11 @@ const algorithmNameMap = {
 }
 
 const datasetName = computed(() => {
-  return datasetNameMap[route.query.dataset]
-    || route.query.dataset
-    || '未选择'
+  return datasetNameMap[route.query.dataset] || route.query.dataset || '未选择'
 })
 
 const algorithmName = computed(() => {
-  return algorithmNameMap[route.query.algorithm]
-    || route.query.algorithm
-    || '未选择'
+  return algorithmNameMap[route.query.algorithm] || route.query.algorithm || '未选择'
 })
 
 const hasResult = computed(() => {
@@ -159,11 +148,11 @@ const initMetricChart = () => {
     },
     tooltip: {
       trigger: 'axis',
-     formatter: (params) => {
-  const item = Array.isArray(params) ? params[0] : params
-  const unit = isRegression.value ? '' : '%'
-  return `${item.name}<br/>${item.seriesName}：${item.value}${unit}`
-},
+      formatter: (params) => {
+        const item = Array.isArray(params) ? params[0] : params
+        const unit = isRegression.value ? '' : '%'
+        return `${item.name}<br/>${item.seriesName}：${item.value}${unit}`
+      },
     },
     xAxis: {
       type: 'category',
@@ -180,22 +169,22 @@ const initMetricChart = () => {
         color: '#64748b',
       },
     },
-   yAxis: {
-  type: 'value',
-  min: isRegression.value ? 0 : 80,
-  max: isRegression.value ? null : 100,
-  axisLabel: {
-    color: '#94a3b8',
-    formatter: (value) => {
-      return isRegression.value ? value : `${value}%`
+    yAxis: {
+      type: 'value',
+      min: isRegression.value ? 0 : 80,
+      max: isRegression.value ? null : 100,
+      axisLabel: {
+        color: '#94a3b8',
+        formatter: (value) => {
+          return isRegression.value ? value : `${value}%`
+        },
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#edf2f7',
+        },
+      },
     },
-  },
-  splitLine: {
-    lineStyle: {
-      color: '#edf2f7',
-    },
-  },
-},
     series: [
       {
         name: '评估指标',
@@ -358,14 +347,8 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <el-empty
-      v-if="!hasResult"
-      class="empty-result"
-      description="暂无可展示的实验结果"
-    >
-      <el-button type="primary" @click="router.push('/data')">
-        开始新实验
-      </el-button>
+    <el-empty v-if="!hasResult" class="empty-result" description="暂无可展示的实验结果">
+      <el-button type="primary" @click="router.push('/data')"> 开始新实验 </el-button>
     </el-empty>
 
     <template v-else>
@@ -393,9 +376,7 @@ onBeforeUnmount(() => {
 
         <div class="summary-item">
           <span>测试集比例</span>
-          <strong>
-            {{ Math.round(Number(route.query.testSize || 0.2) * 100) }}%
-          </strong>
+          <strong> {{ Math.round(Number(route.query.testSize || 0.2) * 100) }}% </strong>
         </div>
 
         <div class="summary-item">
@@ -405,9 +386,7 @@ onBeforeUnmount(() => {
 
         <div class="summary-item">
           <span>运行状态</span>
-          <el-tag type="success" effect="light" round>
-            已完成
-          </el-tag>
+          <el-tag type="success" effect="light" round> 已完成 </el-tag>
         </div>
       </section>
 
@@ -425,7 +404,7 @@ onBeforeUnmount(() => {
 
           <div class="metric-value">
             {{ metric.value }}
-         <small>{{ metric.unit }}</small>
+            <small>{{ metric.unit }}</small>
           </div>
 
           <div class="metric-footer">
@@ -435,48 +414,41 @@ onBeforeUnmount(() => {
         </el-card>
       </section>
 
-     <section
-  class="chart-grid"
-  :class="{ 'single-chart': isRegression }"
->
-  <el-card class="chart-card metric-chart-card" shadow="never">
-    <template #header>
-      <div class="card-header">
-        <div>
-          <h3>模型评估指标</h3>
-          <p>
-            {{ isRegression ? '各项回归指标的综合表现' : '各项分类指标的综合表现' }}
-          </p>
-        </div>
+      <section class="chart-grid" :class="{ 'single-chart': isRegression }">
+        <el-card class="chart-card metric-chart-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <div>
+                <h3>模型评估指标</h3>
+                <p>
+                  {{ isRegression ? '各项回归指标的综合表现' : '各项分类指标的综合表现' }}
+                </p>
+              </div>
 
-        <el-tag effect="plain" round>
-          {{ isRegression ? '回归结果' : '百分比' }}
-        </el-tag>
-      </div>
-    </template>
+              <el-tag effect="plain" round>
+                {{ isRegression ? '回归结果' : '百分比' }}
+              </el-tag>
+            </div>
+          </template>
 
-    <div ref="metricChartRef" class="chart"></div>
-  </el-card>
+          <div ref="metricChartRef" class="chart"></div>
+        </el-card>
 
-  <el-card
-    v-if="!isRegression"
-    class="chart-card"
-    shadow="never"
-  >
-    <template #header>
-      <div class="card-header">
-        <div>
-          <h3>混淆矩阵</h3>
-          <p>真实类别与预测类别的对应关系</p>
-        </div>
+        <el-card v-if="!isRegression" class="chart-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <div>
+                <h3>混淆矩阵</h3>
+                <p>真实类别与预测类别的对应关系</p>
+              </div>
 
-        <el-tag effect="plain" round>分类结果</el-tag>
-      </div>
-    </template>
+              <el-tag effect="plain" round>分类结果</el-tag>
+            </div>
+          </template>
 
-    <div ref="matrixChartRef" class="chart"></div>
-  </el-card>
-</section>
+          <div ref="matrixChartRef" class="chart"></div>
+        </el-card>
+      </section>
 
       <section class="analysis-card">
         <div class="analysis-icon">
@@ -496,10 +468,12 @@ onBeforeUnmount(() => {
       <footer class="page-actions">
         <el-button
           size="large"
-          @click="router.push({
-            path: '/experiment',
-            query: { dataset: route.query.dataset },
-          })"
+          @click="
+            router.push({
+              path: '/experiment',
+              query: { dataset: route.query.dataset },
+            })
+          "
         >
           <el-icon><ArrowLeft /></el-icon>
           修改实验参数
@@ -511,11 +485,7 @@ onBeforeUnmount(() => {
             导出结果
           </el-button>
 
-          <el-button
-            type="primary"
-            size="large"
-            @click="router.push('/data')"
-          >
+          <el-button type="primary" size="large" @click="router.push('/data')">
             <el-icon><RefreshRight /></el-icon>
             开始新实验
           </el-button>
@@ -672,7 +642,7 @@ onBeforeUnmount(() => {
   right: -30px;
   width: 90px;
   height: 90px;
-  content: "";
+  content: '';
   border-radius: 50%;
   opacity: 0.1;
 }

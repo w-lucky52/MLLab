@@ -50,8 +50,7 @@ const filteredList = computed(() => {
       item.dataset.includes(keyword.value)
 
     const matchAlgorithm =
-      !selectedAlgorithm.value ||
-      item.algorithmCode === selectedAlgorithm.value
+      !selectedAlgorithm.value || item.algorithmCode === selectedAlgorithm.value
 
     return matchKeyword && matchAlgorithm
   })
@@ -60,10 +59,7 @@ const filteredList = computed(() => {
 const averageAccuracy = computed(() => {
   if (!experimentList.value.length) return '0.00'
 
-  const total = experimentList.value.reduce(
-    (sum, item) => sum + item.accuracy,
-    0,
-  )
+  const total = experimentList.value.reduce((sum, item) => sum + item.accuracy, 0)
 
   return (total / experimentList.value.length).toFixed(2)
 })
@@ -87,19 +83,13 @@ const viewResult = (row) => {
 
 const deleteRecord = async (row) => {
   try {
-    await ElMessageBox.confirm(
-      `确定删除实验记录 ${row.id} 吗？`,
-      '删除实验记录',
-      {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-      },
-    )
+    await ElMessageBox.confirm(`确定删除实验记录 ${row.id} 吗？`, '删除实验记录', {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
 
-    experimentList.value = experimentList.value.filter(
-      (item) => item.id !== row.id,
-    )
+    experimentList.value = experimentList.value.filter((item) => item.id !== row.id)
 
     ElMessage.success('实验记录已删除')
   } catch {
@@ -195,21 +185,20 @@ const deleteRecord = async (row) => {
               </template>
             </el-input>
 
-           <el-select
-  v-model="selectedAlgorithm"
-  placeholder="全部算法"
-  clearable
-  class="algorithm-select"
->
-  <el-option label="K 近邻" value="knn_classifier" />
-  <el-option label="高斯朴素贝叶斯" value="gaussian_nb" />
-  <el-option label="逻辑回归" value="logistic_regression" />
-  <el-option label="线性回归" value="linear_regression" />
-  <el-option label="岭回归" value="ridge_regression" />
-  <el-option label="决策树回归" value="decision_tree_regressor" />
-  <el-option label="随机森林回归" value="random_forest_regressor" />
-  <el-option label="GBDT 回归" value="gbdt_regressor" />
-</el-select>
+            <el-select
+              v-model="selectedAlgorithm"
+              placeholder="全部算法"
+              clearable
+              class="algorithm-select"
+            >
+              <el-option label="K 近邻" value="knn_classifier" />
+              <el-option label="高斯朴素贝叶斯" value="gaussian_nb" />
+              <el-option label="线性回归" value="linear_regression" />
+              <el-option label="岭回归" value="ridge_regression" />
+              <el-option label="决策树回归" value="decision_tree_regressor" />
+              <el-option label="随机森林回归" value="random_forest_regressor" />
+              <el-option label="GBDT 回归" value="gbdt_regressor" />
+            </el-select>
           </div>
         </div>
       </template>

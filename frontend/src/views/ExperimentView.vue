@@ -46,15 +46,7 @@ const algorithms = [
     taskType: 'classification',
     color: 'purple',
   },
-  {
-    value: 'logistic_regression',
-    name: '逻辑回归',
-    abbreviation: 'LR',
-    description: '经典线性分类模型，可解释性较强。',
-    category: '分类模型',
-    taskType: 'classification',
-    color: 'green',
-  },
+
   {
     value: 'linear_regression',
     name: '线性回归',
