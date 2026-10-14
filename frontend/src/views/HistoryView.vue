@@ -193,6 +193,9 @@ const deleteRecord = async (row) => {
             >
               <el-option label="K 近邻" value="knn_classifier" />
               <el-option label="高斯朴素贝叶斯" value="gaussian_nb" />
+              <el-option label="逻辑回归" value="logistic_regression" />
+              <el-option label="线性 SVM" value="linear_svm" />
+              <el-option label="多层感知机" value="mlp_classifier" />
               <el-option label="线性回归" value="linear_regression" />
               <el-option label="岭回归" value="ridge_regression" />
               <el-option label="决策树回归" value="decision_tree_regressor" />

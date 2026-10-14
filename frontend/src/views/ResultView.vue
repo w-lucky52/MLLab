@@ -32,6 +32,8 @@ const algorithmNameMap = {
   knn_classifier: 'K 近邻（KNN）',
   gaussian_nb: '高斯朴素贝叶斯',
   logistic_regression: '逻辑回归',
+  linear_svm: '线性 SVM',
+  mlp_classifier: '多层感知机',
   linear_regression: '线性回归',
   ridge_regression: '岭回归',
   decision_tree_regressor: '决策树回归（CART）',
