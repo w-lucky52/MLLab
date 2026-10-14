@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class CartRegressionTree:
     def __init__(self, max_depth=None, min_samples_split=2):
         """
@@ -48,7 +49,11 @@ class CartRegressionTree:
                 mse_left = self._mse(y_left)
                 mse_right = self._mse(y_right)
                 #计算分裂带来误差下降，叫增益gain
-                gain = base_mse - (len(y_left)/n_samples*mse_left + len(y_right)/n_samples*mse_right)
+                left_weight = len(y_left) / n_samples
+                right_weight = len(y_right) / n_samples
+                gain = base_mse - (
+                    left_weight * mse_left + right_weight * mse_right
+                )
                 if gain > best_gain:
                     best_gain = gain
                     best_feat = feat_idx
@@ -61,7 +66,9 @@ class CartRegressionTree:
         """
         n_samples = X.shape[0]
         #停止递归条件：达到最大深度 / 样本数量不足，就生成叶子节点
-        if (self.max_depth is not None and depth >= self.max_depth) or n_samples < self.min_samples_split:
+        depth_limit = self.max_depth is not None and depth >= self.max_depth
+        too_few_samples = n_samples < self.min_samples_split
+        if depth_limit or too_few_samples:
             return {"leaf":True, "value":np.mean(y)}
         feat, thresh, gain = self._find_best_split(X,y)
         #找不到任何有效分裂，直接叶子节点
@@ -71,7 +78,14 @@ class CartRegressionTree:
         left_node = self._build_tree(Xl,yl,depth+1)
         right_node = self._build_tree(Xr,yr,depth+1)
         #非叶子节点，保存分裂信息
-        return {"leaf":False,"feature":feat,"threshold":thresh,"left":left_node,"right":right_node,"gain":gain}
+        return {
+            "leaf": False,
+            "feature": feat,
+            "threshold": thresh,
+            "left": left_node,
+            "right": right_node,
+            "gain": gain,
+        }
 
     def _accumulate_gain(self, node, total_gain):
         """

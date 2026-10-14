@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """CartRegressionTree 单元测试（学生C / 树模型体系）
 
 运行方式（项目根目录）：

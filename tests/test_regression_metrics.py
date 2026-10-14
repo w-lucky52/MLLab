@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """回归评估指标单元测试（学生C / 树模型体系）
 
 运行方式（项目根目录）：
@@ -10,8 +9,8 @@ import pytest
 from ml_engine.metrics import (
     mean_absolute_error,
     mean_squared_error,
-    root_mean_squared_error,
     r2_score,
+    root_mean_squared_error,
 )
 
 
