@@ -521,12 +521,12 @@ onBeforeUnmount(() => {
 
         <div class="summary-item">
           <span>测试集比例</span>
-          <strong> {{ Math.round(Number(route.query.testSize || 0.2) * 100) }}% </strong>
+          <strong>{{ Math.round(Number(experiment?.test_size ?? 0.3) * 100) }}% </strong>
         </div>
 
         <div class="summary-item">
           <span>随机种子</span>
-          <strong>{{ route.query.randomState || 42 }}</strong>
+          <strong>{{ experiment?.random_state ?? 42 }}</strong>
         </div>
 
         <div class="summary-item">
@@ -559,7 +559,7 @@ onBeforeUnmount(() => {
         </el-card>
       </section>
 
-      <section class="chart-grid" :class="{ 'single-chart': isRegression }">
+      <section class="chart-grid">
         <el-card class="chart-card metric-chart-card" shadow="never">
           <template #header>
             <div class="card-header">
@@ -579,7 +579,7 @@ onBeforeUnmount(() => {
           <div ref="metricChartRef" class="chart"></div>
         </el-card>
 
-        <el-card v-if="!isRegression" class="chart-card" shadow="never">
+        <el-card class="chart-card" shadow="never">
           <template #header>
             <div class="card-header">
               <div>
@@ -619,7 +619,7 @@ onBeforeUnmount(() => {
           @click="
             router.push({
               path: '/experiment',
-              query: { dataset: route.query.dataset },
+              query: { dataset: experiment?.dataset_name },
             })
           "
         >

@@ -249,7 +249,7 @@ onMounted(fetchModels)
 
       <div>
         <span>当前实验数据</span>
-        <h3>{{ currentDataset }}</h3>
+        <h3>{{ currentDataset.displayName }}</h3>
       </div>
 
       <el-tag type="success" effect="light" round> 数据已就绪 </el-tag>
@@ -401,7 +401,7 @@ onMounted(fetchModels)
     <section class="configuration-summary">
       <div>
         <span>数据集</span>
-        <strong>{{ currentDataset }}</strong>
+        <strong>{{ currentDataset.displayName }}</strong>
       </div>
 
       <div>

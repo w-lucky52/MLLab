@@ -223,14 +223,6 @@ onMounted(fetchExperiments)
       </el-button>
     </section>
 
-    <el-alert
-      title="当前页面展示的是模拟历史记录，连接后端后将从数据库加载真实记录。"
-      type="warning"
-      :closable="false"
-      show-icon
-      class="history-alert"
-    />
-
     <section class="statistics-grid">
       <el-card shadow="never">
         <div class="statistic">
