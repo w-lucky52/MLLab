@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, Check, DataBoard, Document, UploadFilled } from '@element-plus/icons-vue'
@@ -8,72 +8,59 @@ const router = useRouter()
 
 const selectedDataset = ref('')
 const fileName = ref('')
+const datasets = ref([])
+const loading = ref(false)
 
-const datasets = [
-  {
-    name: '鸢尾花数据集',
-    value: 'iris',
-    description: '根据花萼和花瓣特征识别鸢尾花类别。',
-    samples: 150,
-    features: 4,
-    task: '分类',
-    taskType: 'classification',
-    color: 'blue',
-  },
-  {
-    name: '葡萄酒数据集',
-    value: 'wine',
-    description: '根据化学成分特征识别葡萄酒类别。',
-    samples: 178,
-    features: 13,
-    task: '分类',
-    taskType: 'classification',
-    color: 'purple',
-  },
-  {
-    name: '乳腺癌数据集',
-    value: 'breast_cancer',
-    description: '根据细胞特征判断肿瘤的良性与恶性。',
-    samples: 569,
-    features: 30,
-    task: '分类',
-    taskType: 'classification',
-    color: 'green',
-  },
-  {
-    name: '手写数字数据集',
-    value: 'digits',
-    description: '根据图像像素特征识别手写数字类别。',
-    samples: 1797,
-    features: 64,
-    task: '分类',
-    taskType: 'classification',
-    color: 'purple',
-  },
-  {
-    name: '糖尿病数据集',
-    value: 'diabetes',
-    description: '根据患者特征预测糖尿病进展情况。',
-    samples: 442,
-    features: 10,
-    task: '回归',
-    taskType: 'regression',
-    color: 'blue',
-  },
-]
+const datasetMeta = {
+  iris: { displayName: '鸢尾花数据集', color: 'blue' },
+  wine: { displayName: '葡萄酒数据集', color: 'purple' },
+  breast_cancer: { displayName: '乳腺癌数据集', color: 'green' },
+  digits: { displayName: '手写数字数据集', color: 'purple' },
+  diabetes: { displayName: '糖尿病数据集', color: 'blue' },
+}
+
 const currentDataset = computed(() => {
-  return datasets.find((item) => item.value === selectedDataset.value)
+  return datasets.value.find((item) => item.value === selectedDataset.value)
 })
+
+const fetchDatasets = async () => {
+  loading.value = true
+
+  try {
+    const response = await fetch('/api/v1/datasets')
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || '数据集加载失败')
+    }
+
+    const data = await response.json()
+
+    datasets.value = data.map((dataset) => ({
+      name: datasetMeta[dataset.name]?.displayName || dataset.name,
+      value: dataset.name,
+      description: dataset.description,
+      samples: dataset.n_samples,
+      features: dataset.n_features,
+      task: dataset.task_type === 'classification' ? '分类' : '回归',
+      taskType: dataset.task_type,
+      color: datasetMeta[dataset.name]?.color || 'blue',
+    }))
+  } catch (error) {
+    ElMessage.error(error.message || '无法连接后端，请确认后端服务已经启动')
+  } finally {
+    loading.value = false
+  }
+}
 
 const selectDataset = (dataset) => {
   selectedDataset.value = dataset.value
   fileName.value = ''
 }
 
-
 const confirmDataset = () => {
   if (!selectedDataset.value && !fileName.value) {
-    ElMessage.warning('请先选择数据集或上传 CSV 文件')
+    ElMessage.warning('请先选择数据集')
     return
   }
 
@@ -86,6 +73,8 @@ const confirmDataset = () => {
     },
   })
 }
+
+onMounted(fetchDatasets)
 </script>
 
 <template>
@@ -112,7 +101,7 @@ const confirmDataset = () => {
         <el-tag effect="plain" round> 共 {{ datasets.length }} 个数据集 </el-tag>
       </div>
 
-      <div class="dataset-grid">
+      <div v-loading="loading" class="dataset-grid">
         <article
           v-for="dataset in datasets"
           :key="dataset.value"
