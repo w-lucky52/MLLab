@@ -153,6 +153,26 @@ const averageAccuracy = computed(() => {
   return (total / classificationRecords.length).toFixed(2)
 })
 
+const completionRate = computed(() => {
+  if (!experimentList.value.length) return '0.00'
+
+  const completedCount = experimentList.value.filter(
+    (item) => item.statusCode === 'completed',
+  ).length
+
+  return ((completedCount / experimentList.value.length) * 100).toFixed(2)
+})
+
+const statusTagType = (status) => {
+  return (
+    {
+      pending: 'info',
+      running: 'warning',
+      completed: 'success',
+      failed: 'danger',
+    }[status] || 'info'
+  )
+}
 const clearFilters = () => {
   keyword.value = ''
   selectedAlgorithm.value = ''
@@ -260,7 +280,7 @@ onMounted(fetchExperiments)
 
           <div>
             <span>完成率</span>
-            <strong>100%</strong>
+            <strong>{{ completionRate }}%</strong>
             <small>实验运行状态</small>
           </div>
         </div>
@@ -336,14 +356,19 @@ onMounted(fetchExperiments)
             <div class="accuracy-cell">
               <strong>{{ row.metricName }}：{{ row.metricDisplay }}</strong>
 
-              <el-progress :percentage="row.accuracy" :show-text="false" :stroke-width="5" />
+              <el-progress
+                v-if="typeof row.accuracy === 'number'"
+                :percentage="row.accuracy"
+                :show-text="false"
+                :stroke-width="5"
+              />
             </div>
           </template>
         </el-table-column>
 
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag type="success" effect="light" round>
+            <el-tag :type="statusTagType(row.statusCode)" effect="light" round>
               {{ row.status }}
             </el-tag>
           </template>

@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
+import { ArrowLeft, ArrowRight, Check, Cpu, DataAnalysis, Setting } from '@element-plus/icons-vue'
+
 const route = useRoute()
 const router = useRouter()
 
