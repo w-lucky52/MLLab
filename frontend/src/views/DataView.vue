@@ -146,36 +146,32 @@ onMounted(fetchDatasets)
     </div>
 
     <section class="upload-section">
-  <el-alert
-    title="CSV 上传将在第二阶段开放"
-    description="第一阶段请使用上方 5 个内置数据集完成实验。"
-    type="info"
-    :closable="false"
-    show-icon
-    class="upload-alert"
-  />
+      <el-alert
+        title="CSV 上传将在第二阶段开放"
+        description="第一阶段请使用上方 5 个内置数据集完成实验。"
+        type="info"
+        :closable="false"
+        show-icon
+        class="upload-alert"
+      />
 
-  <el-upload
-    drag
-    disabled
-    accept=".csv"
-    :auto-upload="false"
-    :limit="1"
-    :show-file-list="false"
-  >
-    <el-icon class="upload-icon"><UploadFilled /></el-icon>
+      <el-upload
+        drag
+        disabled
+        accept=".csv"
+        :auto-upload="false"
+        :limit="1"
+        :show-file-list="false"
+      >
+        <el-icon class="upload-icon"><UploadFilled /></el-icon>
 
-    <div class="upload-title">CSV 数据集上传</div>
+        <div class="upload-title">CSV 数据集上传</div>
 
-    <div class="upload-description">
-      该功能暂未开放，将在第二阶段接入后端上传接口
-    </div>
+        <div class="upload-description">该功能暂未开放，将在第二阶段接入后端上传接口</div>
 
-    <el-button type="primary" plain disabled>
-      第二阶段开放
-    </el-button>
-  </el-upload>
-</section>
+        <el-button type="primary" plain disabled> 第二阶段开放 </el-button>
+      </el-upload>
+    </section>
     <el-card v-if="selectedDataset || fileName" class="selected-panel" shadow="never">
       <div class="selected-information">
         <div class="selected-file-icon">

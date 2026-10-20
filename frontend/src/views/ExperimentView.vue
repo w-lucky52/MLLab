@@ -1,8 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowRight, Check, Cpu, DataAnalysis, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -10,6 +9,12 @@ const router = useRouter()
 const algorithm = ref('')
 const testSize = ref(0.3)
 const randomState = ref(42)
+const algorithms = ref([])
+const modelsLoading = ref(false)
+const modelParameters = ref([])
+const parameterValues = ref({})
+const parametersLoading = ref(false)
+const submitting = ref(false)
 
 const datasetNameMap = {
   iris: '鸢尾花数据集',
@@ -27,140 +32,184 @@ const datasetTaskTypeMap = {
   diabetes: 'regression',
 }
 
-const algorithms = [
-  {
-    value: 'knn_classifier',
-    name: 'K 近邻',
+const modelMeta = {
+  knn_classifier: {
+    name: 'K 近邻分类',
     abbreviation: 'KNN',
-    description: '根据邻近样本的类别完成预测。',
-    category: '分类模型',
-    taskType: 'classification',
-    color: 'blue',
+    color: '#2563eb',
   },
-  {
-    value: 'gaussian_nb',
+  gaussian_nb: {
     name: '高斯朴素贝叶斯',
     abbreviation: 'GNB',
-    description: '基于概率完成分类，训练速度快。',
-    category: '分类模型',
-    taskType: 'classification',
-    color: 'purple',
+    color: '#7c3aed',
   },
-  {
-    value: 'logistic_regression',
+  logistic_regression: {
     name: '逻辑回归',
     abbreviation: 'LR',
-    description: '经典线性分类模型，可解释性较强。',
-    category: '分类模型',
-    taskType: 'classification',
-    color: 'green',
+    color: '#0891b2',
   },
-  {
-    value: 'linear_svm',
+  linear_svm: {
     name: '线性支持向量机',
     abbreviation: 'SVM',
-    description: '基于最大间隔的线性分类模型。',
-    category: '分类模型',
-    taskType: 'classification',
-    color: 'orange',
+    color: '#db2777',
   },
-  {
-    value: 'mlp_classifier',
+  mlp_classifier: {
     name: '多层感知机',
     abbreviation: 'MLP',
-    description: '单隐藏层神经网络分类模型。',
-    category: '分类模型',
-    taskType: 'classification',
-    color: 'red',
+    color: '#ea580c',
   },
-  {
-    value: 'linear_regression',
+  linear_regression: {
     name: '线性回归',
-    abbreviation: 'Linear',
-    description: '使用线性关系预测连续数值。',
-    category: '回归模型',
-    taskType: 'regression',
-    color: 'blue',
+    abbreviation: 'LIN',
+    color: '#16a34a',
   },
-  {
-    value: 'ridge_regression',
+  ridge_regression: {
     name: '岭回归',
-    abbreviation: 'Ridge',
-    description: '加入正则化的线性回归模型。',
-    category: '回归模型',
-    taskType: 'regression',
-    color: 'purple',
+    abbreviation: 'RIDGE',
+    color: '#0d9488',
   },
-  {
-    value: 'decision_tree_regressor',
+  decision_tree_regressor: {
     name: '决策树回归',
     abbreviation: 'CART',
-    description: '通过树形结构预测连续数值。',
-    category: '回归模型',
-    taskType: 'regression',
-    color: 'orange',
+    color: '#ca8a04',
   },
-  {
-    value: 'random_forest_regressor',
+  random_forest_regressor: {
     name: '随机森林回归',
     abbreviation: 'RF',
-    description: '组合多棵回归树提高预测稳定性。',
-    category: '回归模型',
-    taskType: 'regression',
-    color: 'red',
+    color: '#65a30d',
   },
-  {
-    value: 'gbdt_regressor',
-    name: '梯度提升树回归',
+  gbdt_regressor: {
+    name: '梯度提升回归',
     abbreviation: 'GBDT',
-    description: '逐步提升模型的回归预测能力。',
-    category: '回归模型',
-    taskType: 'regression',
-    color: 'green',
+    color: '#dc2626',
   },
-]
+}
 
 const currentDataset = computed(() => {
-  const dataset = route.query.dataset
-  return datasetNameMap[dataset] || dataset || '尚未选择数据集'
-})
+  const name = route.query.dataset || 'iris'
 
-const currentTaskType = computed(() => {
-  return datasetTaskTypeMap[route.query.dataset]
-})
-
-const filteredAlgorithms = computed(() => {
-  return algorithms.filter((item) => item.taskType === currentTaskType.value)
-})
-
-const selectedAlgorithm = computed(() => {
-  return algorithms.find((item) => item.value === algorithm.value)
-})
-
-const startExperiment = () => {
-  if (!route.query.dataset) {
-    ElMessage.warning('请先选择实验数据集')
-    router.push('/data')
-    return
+  return {
+    name,
+    displayName: datasetNameMap[name] || name,
   }
+})
 
-  if (!algorithm.value) {
-    ElMessage.warning('请选择机器学习算法')
-    return
+const currentTaskType = computed(
+  () => datasetTaskTypeMap[currentDataset.value.name] || 'classification',
+)
+
+const filteredAlgorithms = computed(() =>
+  algorithms.value.filter((item) => item.taskType === currentTaskType.value),
+)
+
+const selectedAlgorithm = computed(() =>
+  algorithms.value.find((item) => item.value === algorithm.value),
+)
+
+const fetchModels = async () => {
+  modelsLoading.value = true
+
+  try {
+    const response = await fetch('/api/v1/models')
+
+    if (!response.ok) {
+      throw new Error(`模型列表请求失败：${response.status}`)
+    }
+
+    const data = await response.json()
+
+    algorithms.value = data.map((model) => {
+      const meta = modelMeta[model.name] || {}
+
+      return {
+        value: model.name,
+        name: meta.name || model.name,
+        abbreviation: meta.abbreviation || model.name.slice(0, 4).toUpperCase(),
+        description: model.description || '暂无模型说明',
+        taskType: model.task_type,
+        category: model.task_type === 'classification' ? '分类模型' : '回归模型',
+        color: meta.color || '#409eff',
+      }
+    })
+
+    if (algorithm.value && !algorithms.value.some((item) => item.value === algorithm.value)) {
+      algorithm.value = ''
+    }
+  } catch (error) {
+    algorithms.value = []
+    ElMessage.error(error.message || '无法获取算法列表，请检查后端是否启动')
+  } finally {
+    modelsLoading.value = false
   }
-
-  ElMessage.success('实验配置完成')
-
-  router.push({
-    path: '/result',
-    query: {
-      dataset: route.query.dataset,
-      algorithm: algorithm.value,
-      testSize: testSize.value,
-      randomState: randomState.value,
-    },
-  })
 }
+
+const selectAlgorithm = async (item) => {
+  algorithm.value = item.value
+  modelParameters.value = []
+  parameterValues.value = {}
+  parametersLoading.value = true
+
+  try {
+    const response = await fetch(`/api/v1/models/${item.value}`)
+
+    if (!response.ok) {
+      throw new Error(`模型参数请求失败：${response.status}`)
+    }
+
+    const data = await response.json()
+    modelParameters.value = data.parameters || []
+
+    parameterValues.value = Object.fromEntries(
+      modelParameters.value.map((parameter) => [parameter.name, parameter.default]),
+    )
+  } catch (error) {
+    ElMessage.error(error.message || '无法获取模型参数')
+  } finally {
+    parametersLoading.value = false
+  }
+}
+const startExperiment = async () => {
+  if (!algorithm.value) {
+    ElMessage.warning('请先选择算法')
+    return
+  }
+
+  submitting.value = true
+
+  try {
+    const response = await fetch('/api/v1/experiments', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        dataset_name: currentDataset.value.name,
+        model_name: algorithm.value,
+        test_size: testSize.value,
+        random_state: randomState.value,
+        params: parameterValues.value,
+      }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      const message = typeof data.detail === 'string' ? data.detail : '创建实验失败'
+
+      throw new Error(message)
+    }
+
+    ElMessage.success('实验创建成功，正在运行')
+
+    router.push(`/result/${data.id}`)
+  } catch (error) {
+    ElMessage.error(error.message || '创建实验失败，请检查后端')
+  } finally {
+    submitting.value = false
+  }
+}
+
+onMounted(fetchModels)
 </script>
 
 <template>
@@ -223,12 +272,12 @@ const startExperiment = () => {
         </el-tag>
       </div>
 
-      <div class="algorithm-grid">
+      <div v-loading="modelsLoading" class="algorithm-grid">
         <article
           v-for="item in filteredAlgorithms"
           :key="item.value"
           :class="['algorithm-card', item.color, { selected: algorithm === item.value }]"
-          @click="algorithm = item.value"
+          @click="selectAlgorithm(item)"
         >
           <div class="algorithm-top">
             <div class="algorithm-icon">
@@ -261,6 +310,51 @@ const startExperiment = () => {
           <h2>设置实验参数</h2>
           <p>这些参数会影响数据划分和实验复现</p>
         </div>
+      </div>
+
+      <div v-if="algorithm" v-loading="parametersLoading" class="parameter-grid">
+        <el-card
+          v-for="parameter in modelParameters"
+          :key="parameter.name"
+          class="parameter-card"
+          shadow="never"
+        >
+          <div class="parameter-info">
+            <div>
+              <h3>{{ parameter.label }}</h3>
+              <p>{{ parameter.description || '请设置该模型参数' }}</p>
+            </div>
+
+            <el-input-number
+              v-if="parameter.type === 'int' || parameter.type === 'float'"
+              v-model="parameterValues[parameter.name]"
+              :min="parameter.min"
+              :max="parameter.max"
+              :step="parameter.step ?? (parameter.type === 'int' ? 1 : 0.01)"
+              controls-position="right"
+            />
+
+            <el-switch
+              v-else-if="parameter.type === 'bool'"
+              v-model="parameterValues[parameter.name]"
+            />
+
+            <el-select
+              v-else-if="parameter.type === 'select'"
+              v-model="parameterValues[parameter.name]"
+              placeholder="请选择"
+            >
+              <el-option
+                v-for="option in parameter.options || []"
+                :key="option"
+                :label="option"
+                :value="option"
+              />
+            </el-select>
+
+            <el-input v-else v-model="parameterValues[parameter.name]" />
+          </div>
+        </el-card>
       </div>
 
       <div class="parameter-grid">
@@ -337,6 +431,7 @@ const startExperiment = () => {
       <el-button
         type="primary"
         size="large"
+        :loading="submitting"
         :disabled="!route.query.dataset || !algorithm"
         @click="startExperiment"
       >

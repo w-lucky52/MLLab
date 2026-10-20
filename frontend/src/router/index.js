@@ -25,7 +25,7 @@ const router = createRouter({
       component: ExperimentView,
     },
     {
-      path: '/result',
+      path: '/result/:id',
       name: 'result',
       component: ResultView,
     },

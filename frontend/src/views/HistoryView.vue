@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Clock, Delete, Plus, Search, View } from '@element-plus/icons-vue'
@@ -8,46 +8,131 @@ const router = useRouter()
 
 const keyword = ref('')
 const selectedAlgorithm = ref('')
+const experimentList = ref([])
+const loading = ref(false)
 
-const experimentList = ref([
-  {
-    id: 'EXP-0001',
-    dataset: '鸢尾花数据集',
-    datasetCode: 'iris',
-    algorithm: 'K 近邻（KNN）',
-    algorithmCode: 'knn_classifier',
-    accuracy: 94.67,
-    status: '已完成',
-    createdAt: '2026-09-22 18:30',
-  },
-  {
-    id: 'EXP-0002',
-    dataset: '葡萄酒数据集',
-    datasetCode: 'wine',
-    algorithm: '高斯朴素贝叶斯',
-    algorithmCode: 'gaussian_nb',
-    accuracy: 96.21,
-    status: '已完成',
-    createdAt: '2026-09-22 18:45',
-  },
-  {
-    id: 'EXP-0003',
-    dataset: '乳腺癌数据集',
-    datasetCode: 'breast_cancer',
-    algorithm: '逻辑回归',
-    algorithmCode: 'logistic_regression',
-    accuracy: 97.08,
-    status: '已完成',
-    createdAt: '2026-09-22 19:10',
-  },
-])
+const datasetNameMap = {
+  iris: '鸢尾花数据集',
+  wine: '葡萄酒数据集',
+  breast_cancer: '乳腺癌数据集',
+  digits: '手写数字数据集',
+  diabetes: '糖尿病数据集',
+}
+
+const algorithmNameMap = {
+  knn_classifier: 'K 近邻（KNN）',
+  gaussian_nb: '高斯朴素贝叶斯',
+  logistic_regression: '逻辑回归',
+  linear_svm: '线性 SVM',
+  mlp_classifier: '多层感知机',
+  linear_regression: '线性回归',
+  ridge_regression: '岭回归',
+  decision_tree_regressor: '决策树回归（CART）',
+  random_forest_regressor: '随机森林回归',
+  gbdt_regressor: '梯度提升树回归（GBDT）',
+}
+
+const statusNameMap = {
+  pending: '等待运行',
+  running: '运行中',
+  completed: '已完成',
+  failed: '运行失败',
+}
+
+const formatDate = (value) => {
+  if (!value) return '—'
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value).replace('T', ' ').slice(0, 16)
+  }
+
+  return date.toLocaleString('zh-CN', {
+    hour12: false,
+  })
+}
+
+const normalizeExperiment = (item) => {
+  const evaluation = item.evaluation || {}
+  const values = evaluation.metrics || {}
+  const taskType =
+    item.task_type ||
+    evaluation.task_type ||
+    (item.dataset_name === 'diabetes' ? 'regression' : 'classification')
+
+  let accuracy = null
+  let metricName = '—'
+  let metricDisplay = '—'
+
+  if (item.status === 'completed' && taskType === 'classification') {
+    const originalAccuracy = Number(values.accuracy)
+
+    if (Number.isFinite(originalAccuracy)) {
+      accuracy = originalAccuracy <= 1 ? originalAccuracy * 100 : originalAccuracy
+
+      metricName = '准确率'
+      metricDisplay = `${accuracy.toFixed(2)}%`
+    }
+  }
+
+  if (item.status === 'completed' && taskType === 'regression') {
+    const r2 = Number(values.r2)
+
+    if (Number.isFinite(r2)) {
+      metricName = 'R²'
+      metricDisplay = r2.toFixed(4)
+    }
+  }
+
+  return {
+    id: `EXP-${String(item.id).padStart(4, '0')}`,
+    backendId: item.id,
+    dataset: datasetNameMap[item.dataset_name] || item.dataset_name,
+    datasetCode: item.dataset_name,
+    algorithm: algorithmNameMap[item.model_name] || item.model_name,
+    algorithmCode: item.model_name,
+    taskType,
+    accuracy,
+    metricName,
+    metricDisplay,
+    status: statusNameMap[item.status] || item.status,
+    statusCode: item.status,
+    createdAt: formatDate(item.created_at),
+  }
+}
+
+const fetchExperiments = async () => {
+  loading.value = true
+
+  try {
+    const response = await fetch('/api/v1/experiments')
+    const data = await response.json()
+
+    if (!response.ok) {
+      const message = typeof data.detail === 'string' ? data.detail : '获取历史记录失败'
+
+      throw new Error(message)
+    }
+
+    experimentList.value = data.map(normalizeExperiment)
+  } catch (error) {
+    experimentList.value = []
+    ElMessage.error(error.message || '无法获取历史记录')
+  } finally {
+    loading.value = false
+  }
+}
 
 const filteredList = computed(() => {
   return experimentList.value.filter((item) => {
+    const searchText = keyword.value.trim().toLowerCase()
+
     const matchKeyword =
-      !keyword.value ||
-      item.id.toLowerCase().includes(keyword.value.toLowerCase()) ||
-      item.dataset.includes(keyword.value)
+      !searchText ||
+      item.id.toLowerCase().includes(searchText) ||
+      item.dataset.toLowerCase().includes(searchText) ||
+      item.algorithm.toLowerCase().includes(searchText)
 
     const matchAlgorithm =
       !selectedAlgorithm.value || item.algorithmCode === selectedAlgorithm.value
@@ -57,11 +142,15 @@ const filteredList = computed(() => {
 })
 
 const averageAccuracy = computed(() => {
-  if (!experimentList.value.length) return '0.00'
+  const classificationRecords = experimentList.value.filter(
+    (item) => item.taskType === 'classification' && typeof item.accuracy === 'number',
+  )
 
-  const total = experimentList.value.reduce((sum, item) => sum + item.accuracy, 0)
+  if (!classificationRecords.length) return '0.00'
 
-  return (total / experimentList.value.length).toFixed(2)
+  const total = classificationRecords.reduce((sum, item) => sum + item.accuracy, 0)
+
+  return (total / classificationRecords.length).toFixed(2)
 })
 
 const clearFilters = () => {
@@ -70,15 +159,12 @@ const clearFilters = () => {
 }
 
 const viewResult = (row) => {
-  router.push({
-    path: '/result',
-    query: {
-      dataset: row.datasetCode,
-      algorithm: row.algorithmCode,
-      testSize: 0.3,
-      randomState: 42,
-    },
-  })
+  if (row.statusCode !== 'completed') {
+    ElMessage.warning('该实验尚未完成，暂时无法查看结果')
+    return
+  }
+
+  router.push(`/result/${row.backendId}`)
 }
 
 const deleteRecord = async (row) => {
@@ -89,13 +175,37 @@ const deleteRecord = async (row) => {
       type: 'warning',
     })
 
-    experimentList.value = experimentList.value.filter((item) => item.id !== row.id)
+    const response = await fetch(`/api/v1/experiments/${row.backendId}`, {
+      method: 'DELETE',
+    })
+
+    if (!response.ok) {
+      let message = '删除实验记录失败'
+
+      try {
+        const data = await response.json()
+
+        if (typeof data.detail === 'string') {
+          message = data.detail
+        }
+      } catch {
+        // 204 等无响应体情况无需处理
+      }
+
+      throw new Error(message)
+    }
+
+    experimentList.value = experimentList.value.filter((item) => item.backendId !== row.backendId)
 
     ElMessage.success('实验记录已删除')
-  } catch {
-    // 用户取消删除时不执行操作
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+
+    ElMessage.error(error.message || '删除实验记录失败')
   }
 }
+
+onMounted(fetchExperiments)
 </script>
 
 <template>
@@ -206,7 +316,12 @@ const deleteRecord = async (row) => {
         </div>
       </template>
 
-      <el-table v-if="filteredList.length" :data="filteredList" class="records-table">
+      <el-table
+        v-if="filteredList.length"
+        v-loading="loading"
+        :data="filteredList"
+        class="records-table"
+      >
         <el-table-column label="实验编号" min-width="130">
           <template #default="{ row }">
             <strong class="experiment-id">{{ row.id }}</strong>
@@ -224,10 +339,10 @@ const deleteRecord = async (row) => {
 
         <el-table-column prop="algorithm" label="机器学习算法" min-width="180" />
 
-        <el-table-column label="准确率" width="130">
+        <el-table-column label="核心指标" width="130">
           <template #default="{ row }">
             <div class="accuracy-cell">
-              <strong>{{ row.accuracy }}%</strong>
+              <strong>{{ row.metricName }}：{{ row.metricDisplay }}</strong>
 
               <el-progress :percentage="row.accuracy" :show-text="false" :stroke-width="5" />
             </div>
