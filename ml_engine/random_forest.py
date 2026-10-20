@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 随机森林回归（学生C / 树模型体系，P1）
 
@@ -112,7 +111,7 @@ class RandomForestRegressor:
         else:
             raise ValueError(
                 "max_features 仅支持 int、(0,1] 内的 float、'sqrt'、'log2' 或 None，"
-                "当前收到：{!r}".format(mf)
+                f"当前收到：{mf!r}"
             )
         #裁剪到 [1, n_features]
         return max(1, min(k, n_features))
