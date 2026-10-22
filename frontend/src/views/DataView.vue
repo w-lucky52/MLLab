@@ -2,12 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Check, DataBoard, Document, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowRight, Check, DataBoard, Document } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
 const selectedDataset = ref('')
-const fileName = ref('')
 const datasets = ref([])
 const loading = ref(false)
 
@@ -55,11 +54,11 @@ const fetchDatasets = async () => {
 
 const selectDataset = (dataset) => {
   selectedDataset.value = dataset.value
-  fileName.value = ''
+
 }
 
 const confirmDataset = () => {
-  if (!selectedDataset.value && !fileName.value) {
+  if (!selectedDataset.value) {
     ElMessage.warning('请先选择数据集')
     return
   }
@@ -69,7 +68,7 @@ const confirmDataset = () => {
   router.push({
     path: '/experiment',
     query: {
-      dataset: selectedDataset.value || fileName.value,
+      dataset: selectedDataset.value,
     },
   })
 }
@@ -83,7 +82,7 @@ onMounted(fetchDatasets)
       <div>
         <span class="eyebrow">DATA CENTER</span>
         <h1>选择实验数据</h1>
-        <p>从标准数据集开始，或者上传自己的 CSV 数据文件。</p>
+        <p>选择经典机器学习数据集，开始模型实验。</p>
       </div>
 
       <div class="heading-icon">
@@ -141,38 +140,9 @@ onMounted(fetchDatasets)
       </div>
     </section>
 
-    <div class="divider">
-      <span>或者使用自己的数据</span>
-    </div>
 
-    <section class="upload-section">
-      <el-alert
-        title="CSV 上传将在第二阶段开放"
-        description="第一阶段请使用上方 5 个内置数据集完成实验。"
-        type="info"
-        :closable="false"
-        show-icon
-        class="upload-alert"
-      />
 
-      <el-upload
-        drag
-        disabled
-        accept=".csv"
-        :auto-upload="false"
-        :limit="1"
-        :show-file-list="false"
-      >
-        <el-icon class="upload-icon"><UploadFilled /></el-icon>
-
-        <div class="upload-title">CSV 数据集上传</div>
-
-        <div class="upload-description">该功能暂未开放，将在第二阶段接入后端上传接口</div>
-
-        <el-button type="primary" plain disabled> 第二阶段开放 </el-button>
-      </el-upload>
-    </section>
-    <el-card v-if="selectedDataset || fileName" class="selected-panel" shadow="never">
+    <el-card v-if="selectedDataset" class="selected-panel" shadow="never">
       <div class="selected-information">
         <div class="selected-file-icon">
           <el-icon><Document /></el-icon>
@@ -181,17 +151,12 @@ onMounted(fetchDatasets)
         <div>
           <span>当前选择</span>
 
-          <h3>
-            {{ currentDataset?.name || fileName }}
-          </h3>
+          <h3>{{ currentDataset?.name }}</h3>
 
-          <p>
-            {{
-              currentDataset
-                ? `${currentDataset.samples} 个样本 · ${currentDataset.features} 个特征 · ${currentDataset.task}`
-                : '本地上传的 CSV 数据文件'
-            }}
-          </p>
+         <p>
+  {{ currentDataset.samples }} 个样本 ·{{ currentDataset.features }} 个特征 ·
+  {{ currentDataset.task }}
+</p>
         </div>
       </div>
 
@@ -207,7 +172,7 @@ onMounted(fetchDatasets)
       <el-button
         type="primary"
         size="large"
-        :disabled="!selectedDataset && !fileName"
+        :disabled="!selectedDataset"
         @click="confirmDataset"
       >
         进入实验配置
@@ -398,56 +363,8 @@ onMounted(fetchDatasets)
   font-size: 13px;
 }
 
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  margin: 30px 0;
-  color: #94a3b8;
-  font-size: 12px;
-}
 
-.divider::before,
-.divider::after {
-  flex: 1;
-  height: 1px;
-  content: '';
-  background: #dfe6ef;
-}
 
-.upload-section :deep(.el-upload) {
-  width: 100%;
-}
-
-.upload-section :deep(.el-upload-dragger) {
-  width: 100%;
-  padding: 35px;
-  border: 1px dashed #bfdbfe;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #f8fbff, #f5f7ff);
-}
-
-.upload-section :deep(.el-upload-dragger:hover) {
-  border-color: #3b82f6;
-}
-
-.upload-icon {
-  margin-bottom: 12px;
-  color: #3b82f6;
-  font-size: 42px;
-}
-
-.upload-title {
-  color: #1e293b;
-  font-size: 16px;
-  font-weight: 650;
-}
-
-.upload-description {
-  margin: 8px 0 18px;
-  color: #94a3b8;
-  font-size: 12px;
-}
 
 .selected-panel {
   margin-top: 22px;

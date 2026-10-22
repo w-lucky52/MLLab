@@ -37,7 +37,7 @@ const statistics = [
 const features = [
   {
     title: '数据管理',
-    description: '选择内置数据集，或上传自己的 CSV 数据文件。',
+    description: '选择经典内置数据集，查看数据特征并开始实验。',
     path: '/data',
     icon: FolderOpened,
   },
@@ -50,7 +50,7 @@ const features = [
   {
     title: '结果分析',
     description: '通过指标和图表直观分析模型表现。',
-    path: '/result',
+    path: '/history',
     icon: DataAnalysis,
   },
 ]

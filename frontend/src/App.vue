@@ -1,5 +1,5 @@
 <script setup>
-import { Clock, DataAnalysis, FolderOpened, House, Setting } from '@element-plus/icons-vue'
+
 </script>
 
 <template>
@@ -39,10 +39,7 @@ import { Clock, DataAnalysis, FolderOpened, House, Setting } from '@element-plus
           <span>实验配置</span>
         </el-menu-item>
 
-        <el-menu-item index="/result">
-          <el-icon><DataAnalysis /></el-icon>
-          <span>实验结果</span>
-        </el-menu-item>
+
 
         <el-menu-item index="/history">
           <el-icon><Clock /></el-icon>

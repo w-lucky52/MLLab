@@ -187,9 +187,9 @@ const startExperiment = async () => {
       body: JSON.stringify({
         dataset_name: currentDataset.value.name,
         model_name: algorithm.value,
-        test_size: testSize.value,
+        test_size: Number(testSize.value.toFixed(1)),
         random_state: randomState.value,
-        params: parameterValues.value,
+        hyperparameters: parameterValues.value,
       }),
     })
 

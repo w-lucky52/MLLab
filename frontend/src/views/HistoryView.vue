@@ -42,7 +42,8 @@ const statusNameMap = {
 const formatDate = (value) => {
   if (!value) return '—'
 
-  const date = new Date(value)
+ const normalizedValue = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`
+const date = new Date(normalizedValue)
 
   if (Number.isNaN(date.getTime())) {
     return String(value).replace('T', ' ').slice(0, 16)
