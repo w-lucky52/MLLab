@@ -1,79 +1,65 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Check, DataBoard, Document, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowRight, Check, DataBoard, Document } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
 const selectedDataset = ref('')
-const fileName = ref('')
+const datasets = ref([])
+const loading = ref(false)
 
-const datasets = [
-  {
-    name: '鸢尾花数据集',
-    value: 'iris',
-    description: '根据花萼和花瓣特征识别鸢尾花类别。',
-    samples: 150,
-    features: 4,
-    task: '分类',
-    taskType: 'classification',
-    color: 'blue',
-  },
-  {
-    name: '葡萄酒数据集',
-    value: 'wine',
-    description: '根据化学成分特征识别葡萄酒类别。',
-    samples: 178,
-    features: 13,
-    task: '分类',
-    taskType: 'classification',
-    color: 'purple',
-  },
-  {
-    name: '乳腺癌数据集',
-    value: 'breast_cancer',
-    description: '根据细胞特征判断肿瘤的良性与恶性。',
-    samples: 569,
-    features: 30,
-    task: '分类',
-    taskType: 'classification',
-    color: 'green',
-  },
-  {
-    name: '手写数字数据集',
-    value: 'digits',
-    description: '根据图像像素特征识别手写数字类别。',
-    samples: 1797,
-    features: 64,
-    task: '分类',
-    taskType: 'classification',
-    color: 'purple',
-  },
-  {
-    name: '糖尿病数据集',
-    value: 'diabetes',
-    description: '根据患者特征预测糖尿病进展情况。',
-    samples: 442,
-    features: 10,
-    task: '回归',
-    taskType: 'regression',
-    color: 'blue',
-  },
-]
+const datasetMeta = {
+  iris: { displayName: '鸢尾花数据集', color: 'blue' },
+  wine: { displayName: '葡萄酒数据集', color: 'purple' },
+  breast_cancer: { displayName: '乳腺癌数据集', color: 'green' },
+  digits: { displayName: '手写数字数据集', color: 'purple' },
+  diabetes: { displayName: '糖尿病数据集', color: 'blue' },
+}
+
 const currentDataset = computed(() => {
-  return datasets.find((item) => item.value === selectedDataset.value)
+  return datasets.value.find((item) => item.value === selectedDataset.value)
 })
+
+const fetchDatasets = async () => {
+  loading.value = true
+
+  try {
+    const response = await fetch('/api/v1/datasets')
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || '数据集加载失败')
+    }
+
+    const data = await response.json()
+
+    datasets.value = data.map((dataset) => ({
+      name: datasetMeta[dataset.name]?.displayName || dataset.name,
+      value: dataset.name,
+      description: dataset.description,
+      samples: dataset.n_samples,
+      features: dataset.n_features,
+      task: dataset.task_type === 'classification' ? '分类' : '回归',
+      taskType: dataset.task_type,
+      color: datasetMeta[dataset.name]?.color || 'blue',
+    }))
+  } catch (error) {
+    ElMessage.error(error.message || '无法连接后端，请确认后端服务已经启动')
+  } finally {
+    loading.value = false
+  }
+}
 
 const selectDataset = (dataset) => {
   selectedDataset.value = dataset.value
-  fileName.value = ''
+
 }
 
-
 const confirmDataset = () => {
-  if (!selectedDataset.value && !fileName.value) {
-    ElMessage.warning('请先选择数据集或上传 CSV 文件')
+  if (!selectedDataset.value) {
+    ElMessage.warning('请先选择数据集')
     return
   }
 
@@ -82,10 +68,12 @@ const confirmDataset = () => {
   router.push({
     path: '/experiment',
     query: {
-      dataset: selectedDataset.value || fileName.value,
+      dataset: selectedDataset.value,
     },
   })
 }
+
+onMounted(fetchDatasets)
 </script>
 
 <template>
@@ -94,7 +82,7 @@ const confirmDataset = () => {
       <div>
         <span class="eyebrow">DATA CENTER</span>
         <h1>选择实验数据</h1>
-        <p>从标准数据集开始，或者上传自己的 CSV 数据文件。</p>
+        <p>选择经典机器学习数据集，开始模型实验。</p>
       </div>
 
       <div class="heading-icon">
@@ -112,7 +100,7 @@ const confirmDataset = () => {
         <el-tag effect="plain" round> 共 {{ datasets.length }} 个数据集 </el-tag>
       </div>
 
-      <div class="dataset-grid">
+      <div v-loading="loading" class="dataset-grid">
         <article
           v-for="dataset in datasets"
           :key="dataset.value"
@@ -152,42 +140,9 @@ const confirmDataset = () => {
       </div>
     </section>
 
-    <div class="divider">
-      <span>或者使用自己的数据</span>
-    </div>
 
-    <section class="upload-section">
-  <el-alert
-    title="CSV 上传将在第二阶段开放"
-    description="第一阶段请使用上方 5 个内置数据集完成实验。"
-    type="info"
-    :closable="false"
-    show-icon
-    class="upload-alert"
-  />
 
-  <el-upload
-    drag
-    disabled
-    accept=".csv"
-    :auto-upload="false"
-    :limit="1"
-    :show-file-list="false"
-  >
-    <el-icon class="upload-icon"><UploadFilled /></el-icon>
-
-    <div class="upload-title">CSV 数据集上传</div>
-
-    <div class="upload-description">
-      该功能暂未开放，将在第二阶段接入后端上传接口
-    </div>
-
-    <el-button type="primary" plain disabled>
-      第二阶段开放
-    </el-button>
-  </el-upload>
-</section>
-    <el-card v-if="selectedDataset || fileName" class="selected-panel" shadow="never">
+    <el-card v-if="selectedDataset" class="selected-panel" shadow="never">
       <div class="selected-information">
         <div class="selected-file-icon">
           <el-icon><Document /></el-icon>
@@ -196,17 +151,12 @@ const confirmDataset = () => {
         <div>
           <span>当前选择</span>
 
-          <h3>
-            {{ currentDataset?.name || fileName }}
-          </h3>
+          <h3>{{ currentDataset?.name }}</h3>
 
-          <p>
-            {{
-              currentDataset
-                ? `${currentDataset.samples} 个样本 · ${currentDataset.features} 个特征 · ${currentDataset.task}`
-                : '本地上传的 CSV 数据文件'
-            }}
-          </p>
+         <p>
+  {{ currentDataset.samples }} 个样本 ·{{ currentDataset.features }} 个特征 ·
+  {{ currentDataset.task }}
+</p>
         </div>
       </div>
 
@@ -222,7 +172,7 @@ const confirmDataset = () => {
       <el-button
         type="primary"
         size="large"
-        :disabled="!selectedDataset && !fileName"
+        :disabled="!selectedDataset"
         @click="confirmDataset"
       >
         进入实验配置
@@ -413,56 +363,8 @@ const confirmDataset = () => {
   font-size: 13px;
 }
 
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  margin: 30px 0;
-  color: #94a3b8;
-  font-size: 12px;
-}
 
-.divider::before,
-.divider::after {
-  flex: 1;
-  height: 1px;
-  content: '';
-  background: #dfe6ef;
-}
 
-.upload-section :deep(.el-upload) {
-  width: 100%;
-}
-
-.upload-section :deep(.el-upload-dragger) {
-  width: 100%;
-  padding: 35px;
-  border: 1px dashed #bfdbfe;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #f8fbff, #f5f7ff);
-}
-
-.upload-section :deep(.el-upload-dragger:hover) {
-  border-color: #3b82f6;
-}
-
-.upload-icon {
-  margin-bottom: 12px;
-  color: #3b82f6;
-  font-size: 42px;
-}
-
-.upload-title {
-  color: #1e293b;
-  font-size: 16px;
-  font-weight: 650;
-}
-
-.upload-description {
-  margin: 8px 0 18px;
-  color: #94a3b8;
-  font-size: 12px;
-}
 
 .selected-panel {
   margin-top: 22px;

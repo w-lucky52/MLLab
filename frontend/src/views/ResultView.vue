@@ -14,11 +14,13 @@ import {
 const route = useRoute()
 const router = useRouter()
 
+const experiment = ref(null)
 const metricChartRef = ref(null)
 const matrixChartRef = ref(null)
 
 let metricChart = null
 let matrixChart = null
+let pollTimer = null
 
 const datasetNameMap = {
   iris: '鸢尾花数据集',
@@ -42,100 +44,135 @@ const algorithmNameMap = {
 }
 
 const datasetName = computed(() => {
-  return datasetNameMap[route.query.dataset] || route.query.dataset || '未选择'
+  const name = experiment.value?.dataset_name
+  return datasetNameMap[name] || name || '加载中'
 })
 
 const algorithmName = computed(() => {
-  return algorithmNameMap[route.query.algorithm] || route.query.algorithm || '未选择'
+  const name = experiment.value?.model_name
+  return algorithmNameMap[name] || name || '加载中'
+})
+
+const evaluation = computed(() => {
+  return experiment.value?.evaluation || null
 })
 
 const hasResult = computed(() => {
-  return Boolean(route.query.dataset && route.query.algorithm)
+  return experiment.value?.status === 'completed' && Boolean(evaluation.value)
 })
-
-const regressionAlgorithms = [
-  'linear_regression',
-  'ridge_regression',
-  'decision_tree_regressor',
-  'random_forest_regressor',
-  'gbdt_regressor',
-]
 
 const isRegression = computed(() => {
   return (
-    route.query.dataset === 'diabetes' ||
-    regressionAlgorithms.includes(String(route.query.algorithm || ''))
+    experiment.value?.task_type === 'regression' || evaluation.value?.task_type === 'regression'
   )
 })
 
+const toNumber = (value) => {
+  const result = Number(value)
+  return Number.isFinite(result) ? result : 0
+}
+
+const toPercentage = (value) => {
+  const result = toNumber(value)
+  return result <= 1 ? result * 100 : result
+}
+
+const roundValue = (value, digits = 2) => {
+  return Number(toNumber(value).toFixed(digits))
+}
+
 const metrics = computed(() => {
+  const values = evaluation.value?.metrics || {}
+
   if (isRegression.value) {
     return [
       {
         name: 'MAE',
-        value: 42.36,
+        value: roundValue(values.mae),
         change: '越低越好',
         color: 'blue',
         unit: '',
       },
       {
         name: 'MSE',
-        value: 2856.42,
+        value: roundValue(values.mse),
         change: '越低越好',
         color: 'purple',
         unit: '',
       },
       {
         name: 'RMSE',
-        value: 53.45,
+        value: roundValue(values.rmse),
         change: '越低越好',
         color: 'green',
         unit: '',
       },
       {
         name: 'R²',
-        value: 0.48,
+        value: roundValue(values.r2, 4),
         change: '越高越好',
         color: 'orange',
         unit: '',
       },
     ]
   }
-
   return [
     {
       name: '准确率',
-      value: 94.67,
-      change: '+2.31%',
+      value: roundValue(toPercentage(values.accuracy)),
+      change: '越高越好',
       color: 'blue',
       unit: '%',
     },
     {
       name: '加权精确率',
-      value: 94.31,
-      change: '+1.86%',
+      value: roundValue(toPercentage(values.precision_weighted)),
+      change: '越高越好',
       color: 'purple',
       unit: '%',
     },
     {
       name: '加权召回率',
-      value: 93.85,
-      change: '+1.52%',
+      value: roundValue(toPercentage(values.recall_weighted)),
+      change: '越高越好',
       color: 'green',
       unit: '%',
     },
     {
       name: '加权 F1',
-      value: 94.08,
-      change: '+1.73%',
+      value: roundValue(toPercentage(values.f1_weighted)),
+      change: '越高越好',
       color: 'orange',
       unit: '%',
     },
   ]
 })
 
+const resultOverviewTitle = computed(() => {
+  if (!hasResult.value) return '实验运行中'
+
+  if (isRegression.value) {
+    const r2 = metrics.value[3]?.value || 0
+    return r2 >= 0.7 ? '模型拟合表现良好' : '模型实验已完成'
+  }
+
+  const accuracy = metrics.value[0]?.value || 0
+  return accuracy >= 90 ? '模型整体表现良好' : '模型实验已完成'
+})
+
+const resultOverviewText = computed(() => {
+  if (!hasResult.value) {
+    return '正在等待后端返回实验结果。'
+  }
+
+  if (isRegression.value) {
+    return `本次真实实验中，模型的 MAE 为 ${metrics.value[0]?.value}，RMSE 为 ${metrics.value[2]?.value}，R² 为 ${metrics.value[3]?.value}。可继续调整参数或更换算法进行对比实验。`
+  }
+
+  return `本次真实实验中，模型准确率为 ${metrics.value[0]?.value}%，加权精确率为 ${metrics.value[1]?.value}%，加权召回率为 ${metrics.value[2]?.value}%，加权 F1 为 ${metrics.value[3]?.value}%。可继续调整参数或更换算法进行对比实验。`
+})
 const initMetricChart = () => {
-  if (!metricChartRef.value) return
+  if (!metricChartRef.value || !hasResult.value) return
 
   metricChart?.dispose()
   metricChart = echarts.init(metricChartRef.value)
@@ -146,14 +183,14 @@ const initMetricChart = () => {
       top: 25,
       right: 18,
       bottom: 35,
-      left: 48,
+      left: 58,
     },
     tooltip: {
       trigger: 'axis',
       formatter: (params) => {
         const item = Array.isArray(params) ? params[0] : params
         const unit = isRegression.value ? '' : '%'
-        return `${item.name}<br/>${item.seriesName}：${item.value}${unit}`
+        return `${item.name}<br/>${item.seriesName}：${toNumber(item.value).toFixed(2)}${unit}`
       },
     },
     xAxis: {
@@ -173,8 +210,8 @@ const initMetricChart = () => {
     },
     yAxis: {
       type: 'value',
-      min: isRegression.value ? 0 : 80,
-      max: isRegression.value ? null : 100,
+      min: 0,
+      max: isRegression.value ? undefined : 100,
       axisLabel: {
         color: '#94a3b8',
         formatter: (value) => {
@@ -211,31 +248,29 @@ const initMetricChart = () => {
   })
 }
 
-const initMatrixChart = () => {
-  if (!matrixChartRef.value) return
+const initClassificationChart = () => {
+  const matrix = evaluation.value?.confusion_matrix || []
+  const labels = evaluation.value?.class_labels || []
 
-  matrixChart?.dispose()
-  matrixChart = echarts.init(matrixChartRef.value)
+  const matrixData = matrix.flatMap((row, rowIndex) =>
+    row.map((value, columnIndex) => [columnIndex, rowIndex, value]),
+  )
 
-  const matrixData = [
-    [0, 0, 10],
-    [1, 0, 0],
-    [2, 0, 0],
-    [0, 1, 0],
-    [1, 1, 9],
-    [2, 1, 1],
-    [0, 2, 0],
-    [1, 2, 1],
-    [2, 2, 9],
-  ]
+  const displayLabels = labels.length
+    ? labels.map((label) => String(label))
+    : matrix.map((_, index) => `类别 ${index + 1}`)
+
+  const maximum = Math.max(1, ...matrixData.map((item) => toNumber(item[2])))
 
   matrixChart.setOption({
     animationDuration: 900,
     tooltip: {
       position: 'top',
       formatter: (params) => {
-        return `真实类别 ${params.value[1] + 1}<br/>
-                预测类别 ${params.value[0] + 1}：${params.value[2]}`
+        const predicted = displayLabels[params.value[0]]
+        const actual = displayLabels[params.value[1]]
+
+        return `真实类别：${actual}<br/>预测类别：${predicted}<br/>样本数：${params.value[2]}`
       },
     },
     grid: {
@@ -246,7 +281,7 @@ const initMatrixChart = () => {
     },
     xAxis: {
       type: 'category',
-      data: ['类别 1', '类别 2', '类别 3'],
+      data: displayLabels,
       name: '预测类别',
       nameLocation: 'middle',
       nameGap: 38,
@@ -259,7 +294,7 @@ const initMatrixChart = () => {
     },
     yAxis: {
       type: 'category',
-      data: ['类别 1', '类别 2', '类别 3'],
+      data: displayLabels,
       name: '真实类别',
       nameLocation: 'middle',
       nameGap: 50,
@@ -272,7 +307,7 @@ const initMatrixChart = () => {
     },
     visualMap: {
       min: 0,
-      max: 10,
+      max: maximum,
       show: false,
       inRange: {
         color: ['#eff6ff', '#93c5fd', '#2563eb'],
@@ -288,15 +323,97 @@ const initMatrixChart = () => {
           color: '#0f172a',
           fontWeight: 700,
         },
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowColor: 'rgb(37 99 235 / 30%)',
-          },
+      },
+    ],
+  })
+}
+
+const initRegressionChart = () => {
+  const yTrue = evaluation.value?.y_true || []
+  const yPred = evaluation.value?.y_pred || []
+
+  const scatterData = yTrue.map((value, index) => [toNumber(value), toNumber(yPred[index])])
+
+  const allValues = scatterData.flat()
+  const minimum = Math.min(...allValues)
+  const maximum = Math.max(...allValues)
+
+  matrixChart.setOption({
+    animationDuration: 900,
+    tooltip: {
+      trigger: 'item',
+      formatter: (params) => {
+        return `真实值：${params.value[0].toFixed(2)}<br/>预测值：${params.value[1].toFixed(2)}`
+      },
+    },
+    grid: {
+      top: 30,
+      right: 30,
+      bottom: 60,
+      left: 70,
+    },
+    xAxis: {
+      type: 'value',
+      name: '真实值',
+      nameLocation: 'middle',
+      nameGap: 38,
+      splitLine: {
+        lineStyle: {
+          color: '#edf2f7',
+        },
+      },
+    },
+    yAxis: {
+      type: 'value',
+      name: '预测值',
+      nameLocation: 'middle',
+      nameGap: 50,
+      splitLine: {
+        lineStyle: {
+          color: '#edf2f7',
+        },
+      },
+    },
+    series: [
+      {
+        name: '预测样本',
+        type: 'scatter',
+        symbolSize: 10,
+        data: scatterData,
+        itemStyle: {
+          color: '#3b82f6',
+          opacity: 0.75,
+        },
+      },
+      {
+        name: '理想预测线',
+        type: 'line',
+        data: [
+          [minimum, minimum],
+          [maximum, maximum],
+        ],
+        symbol: 'none',
+        lineStyle: {
+          color: '#ef4444',
+          type: 'dashed',
+          width: 2,
         },
       },
     ],
   })
+}
+
+const initResultChart = () => {
+  if (!matrixChartRef.value || !hasResult.value) return
+
+  matrixChart?.dispose()
+  matrixChart = echarts.init(matrixChartRef.value)
+
+  if (isRegression.value) {
+    initRegressionChart()
+  } else {
+    initClassificationChart()
+  }
 }
 
 const initCharts = async () => {
@@ -304,7 +421,38 @@ const initCharts = async () => {
 
   await nextTick()
   initMetricChart()
-  initMatrixChart()
+  initResultChart()
+}
+
+const fetchExperiment = async () => {
+  clearTimeout(pollTimer)
+
+  try {
+    const response = await fetch(`/api/v1/experiments/${route.params.id}`)
+    const data = await response.json()
+
+    if (!response.ok) {
+      const message = typeof data.detail === 'string' ? data.detail : '获取实验结果失败'
+
+      throw new Error(message)
+    }
+
+    experiment.value = data
+
+    if (data.status === 'completed') {
+      await initCharts()
+      return
+    }
+
+    if (data.status === 'failed') {
+      ElMessage.error(data.error || '实验运行失败')
+      return
+    }
+
+    pollTimer = setTimeout(fetchExperiment, 1500)
+  } catch (error) {
+    ElMessage.error(error.message || '无法获取实验结果')
+  }
 }
 
 const resizeCharts = () => {
@@ -313,22 +461,26 @@ const resizeCharts = () => {
 }
 
 const exportResult = () => {
-  ElMessage.success('实验结果导出功能将在连接后端后启用')
+  ElMessage.info('结果导出功能将在后续步骤接入')
 }
 
 onMounted(() => {
-  initCharts()
+  fetchExperiment()
   window.addEventListener('resize', resizeCharts)
 })
 
 watch(
-  () => route.fullPath,
+  () => route.params.id,
   () => {
-    initCharts()
+    experiment.value = null
+    metricChart?.dispose()
+    matrixChart?.dispose()
+    fetchExperiment()
   },
 )
 
 onBeforeUnmount(() => {
+  clearTimeout(pollTimer)
   window.removeEventListener('resize', resizeCharts)
   metricChart?.dispose()
   matrixChart?.dispose()
@@ -354,15 +506,6 @@ onBeforeUnmount(() => {
     </el-empty>
 
     <template v-else>
-      <el-alert
-        title="演示数据说明"
-        description="当前评估指标与混淆矩阵为前端模拟数据，连接后端接口后将展示真实模型结果。"
-        type="warning"
-        :closable="false"
-        show-icon
-        class="result-alert"
-      />
-
       <section class="experiment-summary">
         <div class="summary-main">
           <div class="summary-icon">
@@ -378,12 +521,12 @@ onBeforeUnmount(() => {
 
         <div class="summary-item">
           <span>测试集比例</span>
-          <strong> {{ Math.round(Number(route.query.testSize || 0.2) * 100) }}% </strong>
+          <strong>{{ Math.round(Number(experiment?.test_size ?? 0.3) * 100) }}% </strong>
         </div>
 
         <div class="summary-item">
           <span>随机种子</span>
-          <strong>{{ route.query.randomState || 42 }}</strong>
+          <strong>{{ experiment?.random_state ?? 42 }}</strong>
         </div>
 
         <div class="summary-item">
@@ -416,7 +559,7 @@ onBeforeUnmount(() => {
         </el-card>
       </section>
 
-      <section class="chart-grid" :class="{ 'single-chart': isRegression }">
+      <section class="chart-grid">
         <el-card class="chart-card metric-chart-card" shadow="never">
           <template #header>
             <div class="card-header">
@@ -436,15 +579,21 @@ onBeforeUnmount(() => {
           <div ref="metricChartRef" class="chart"></div>
         </el-card>
 
-        <el-card v-if="!isRegression" class="chart-card" shadow="never">
+        <el-card class="chart-card" shadow="never">
           <template #header>
             <div class="card-header">
               <div>
-                <h3>混淆矩阵</h3>
-                <p>真实类别与预测类别的对应关系</p>
+                <h3>{{ isRegression ? '真实值与预测值' : '混淆矩阵' }}</h3>
+                <p>
+                  {{
+                    isRegression ? '预测结果与真实目标值的对应关系' : '真实类别与预测类别的对应关系'
+                  }}
+                </p>
               </div>
 
-              <el-tag effect="plain" round>分类结果</el-tag>
+              <el-tag effect="plain" round>
+                {{ isRegression ? '回归结果' : '分类结果' }}
+              </el-tag>
             </div>
           </template>
 
@@ -459,11 +608,8 @@ onBeforeUnmount(() => {
 
         <div>
           <span>结果概览</span>
-          <h3>模型整体表现良好</h3>
-          <p>
-            当前模拟结果中，模型准确率达到 94.67%，各项指标较为均衡。
-            后续可通过调整参数或更换算法进行对比实验。
-          </p>
+          <h3>{{ resultOverviewTitle }}</h3>
+          <p>{{ resultOverviewText }}</p>
         </div>
       </section>
 
@@ -473,7 +619,7 @@ onBeforeUnmount(() => {
           @click="
             router.push({
               path: '/experiment',
-              query: { dataset: route.query.dataset },
+              query: { dataset: experiment?.dataset_name },
             })
           "
         >
