@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, DataAnalysis, Download, RefreshRight, TrendCharts } from '@element-plus/icons-vue'
 
 import ClassificationPerformance from '@/components/result/ClassificationPerformance.vue'
-import ComingSoonPanel from '@/components/result/ComingSoonPanel.vue'
+import ModelExplanation from '@/components/result/ModelExplanation.vue'
 import RegressionPerformance from '@/components/result/RegressionPerformance.vue'
 import TrainingProcess from '@/components/result/TrainingProcess.vue'
 
@@ -291,9 +291,12 @@ onBeforeUnmount(() => {
         </el-tab-pane>
 
         <el-tab-pane label="模型解释" name="interpretation">
-          <ComingSoonPanel
-            title="模型解释"
-            description="模型解释将在下一阶段展示，包括模型结构和可解释参数。"
+          <ModelExplanation
+            :model-name="experiment?.model_name || ''"
+            :task-type="isRegression ? 'regression' : 'classification'"
+            :training-info="experiment?.training_info"
+            :score-classes="evaluation?.score_classes"
+            :active="activeTab === 'interpretation'"
           />
         </el-tab-pane>
       </el-tabs>
