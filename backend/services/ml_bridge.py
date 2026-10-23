@@ -188,7 +188,11 @@ def create_estimator(
     return base.get_model(name).create_estimator(hyperparameters, random_state)
 
 
-def get_training_info(estimator: Any) -> dict[str, Any]:
+def get_training_info(
+    estimator: Any,
+    feature_names: list[str] | None = None,
+    fit_duration_ms: float | None = None,
+) -> dict[str, Any]:
     """Extract training metadata from a fitted estimator.
 
     Reads sklearn-style fitted attributes (trailing underscore) and maps
@@ -202,7 +206,8 @@ def get_training_info(estimator: Any) -> dict[str, Any]:
     ``feature_importances_`` -> ``feature_importances``
     ``n_features_in_`` -> ``n_features_in``
 
-    Fields are omitted when the estimator does not expose them.
+    ``feature_names`` (when supplied) and ``fit_duration_ms`` are also
+    recorded. Fields are omitted when the estimator does not expose them.
 
     Layer-list weights (``coefs_`` / ``intercepts_`` as exposed by
     ``MLPClassifier``) are intentionally NOT mapped: per-layer shapes would
@@ -230,20 +235,62 @@ def get_training_info(estimator: Any) -> dict[str, Any]:
         info["feature_importances"] = np.asarray(
             estimator.feature_importances_
         ).tolist()
+    if feature_names is not None:
+        info["feature_names"] = list(feature_names)
+    if fit_duration_ms is not None:
+        info["fit_duration_ms"] = float(fit_duration_ms)
     return info
 
 
-def get_predict_scores(estimator: Any, X: Any) -> Any | None:
-    """Return prediction scores for AUC/ROC computation, or ``None``.
+def get_predict_scores(estimator: Any, X: Any) -> dict[str, Any] | None:
+    """Return structured prediction scores, or ``None``.
 
-    Prefers ``predict_proba`` (returns per-class probabilities) and falls
-    back to ``decision_function``. Returns ``None`` if neither is available.
+    Returns a dict with keys:
+
+    - ``y_score``: 2D array (n_samples, n_classes) or None
+    - ``score_type``: "probability" / "decision" / None
+    - ``score_classes``: class labels matching columns of y_score, or None
+
+    Rules:
+
+    1. ``predict_proba`` is preferred when available (score_type="probability").
+    2. Otherwise ``decision_function`` is used (score_type="decision").
+       For binary classification a 1-D output is converted to two columns
+       where column 0 = -score and column 1 = +score (so argmax matches
+       ``estimator.classes_``).
+    3. If neither method exists, returns ``None``.
+    4. ``score_classes`` always matches ``estimator.classes_``.
     """
+    import numpy as np
+
+    classes = getattr(estimator, "classes_", None)
+
     if hasattr(estimator, "predict_proba"):
-        return estimator.predict_proba(X)
-    if hasattr(estimator, "decision_function"):
-        return estimator.decision_function(X)
-    return None
+        y_score = np.asarray(estimator.predict_proba(X))
+        score_type = "probability"
+    elif hasattr(estimator, "decision_function"):
+        raw = np.asarray(estimator.decision_function(X))
+        score_type = "decision"
+        # Binary decision_function may return 1-D signed scores; convert to
+        # two columns so argmax(score) matches estimator.classes_.
+        if raw.ndim == 1:
+            y_score = np.stack([-raw, raw], axis=1)
+        else:
+            y_score = raw
+    else:
+        return None
+
+    if not np.all(np.isfinite(y_score)):
+        raise FloatingPointError(
+            "Non-finite prediction scores detected; refusing to write to database."
+        )
+
+    result: dict[str, Any] = {
+        "y_score": y_score.tolist(),
+        "score_type": score_type,
+        "score_classes": list(classes) if classes is not None else None,
+    }
+    return result
 
 
 # --- evaluation & visualization ----------------------------------------------

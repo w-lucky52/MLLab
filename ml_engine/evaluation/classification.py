@@ -3,6 +3,7 @@ from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
     f1_score,
+    precision_recall_fscore_support,
     precision_score,
     recall_score,
 )
@@ -33,4 +34,26 @@ def evaluate(y_true, y_pred, y_score=None, class_labels=None) -> dict:
     else:
         labels_out = numeric_labels.tolist()
 
-    return {"metrics": metrics, "confusion_matrix": cm, "class_labels": labels_out}
+    # Per-class precision / recall / f1 / support, in the same order as
+    # confusion_matrix rows/columns and class_labels.
+    precisions, recalls, f1s, supports = precision_recall_fscore_support(
+        y_true, y_pred, labels=numeric_labels, zero_division=0
+    )
+    per_class_metrics = []
+    for idx in range(len(numeric_labels)):
+        per_class_metrics.append(
+            {
+                "class": labels_out[idx],
+                "precision": float(precisions[idx]),
+                "recall": float(recalls[idx]),
+                "f1": float(f1s[idx]),
+                "support": int(supports[idx]),
+            }
+        )
+
+    return {
+        "metrics": metrics,
+        "confusion_matrix": cm,
+        "class_labels": labels_out,
+        "per_class_metrics": per_class_metrics,
+    }

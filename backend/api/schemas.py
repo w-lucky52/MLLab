@@ -98,6 +98,18 @@ class ExperimentCreate(BaseModel):
         return value
 
 
+class PerClassMetrics(BaseModel):
+    """Precision / recall / f1 / support for one class."""
+
+    model_config = ConfigDict(serialize_by_alias=True, populate_by_name=True)
+
+    class_value: str | int | float = Field(alias="class")
+    precision: float
+    recall: float
+    f1: float
+    support: int
+
+
 class TrainingInfo(BaseModel):
     """Training metadata returned by iterative models.
 
@@ -110,6 +122,10 @@ class TrainingInfo(BaseModel):
     stop_reason: str | None = None
     coefficients: list[list[float]] | list[float] | None = None
     intercept: list[float] | float | None = None
+    feature_importances: list[float] | None = None
+    n_features_in: int | None = None
+    feature_names: list[str] | None = None
+    fit_duration_ms: float | None = None
 
 
 # --- charts ------------------------------------------------------------------
@@ -154,7 +170,9 @@ class ChartSpec(BaseModel):
 class EvaluationResult(BaseModel):
     """Raw evaluation data rendered by the frontend (ECharts).
 
-    Classification: ``metrics`` + ``confusion_matrix`` + ``class_labels``.
+    Classification: ``metrics`` + ``confusion_matrix`` + ``class_labels``
+    + ``y_true`` + ``y_pred`` + ``y_score`` + ``score_type``
+    + ``score_classes`` + ``per_class_metrics``.
     Regression: ``metrics`` + ``y_true`` + ``y_pred`` (for actual-vs-predicted
     and residual plots). The unused fields are ``null``.
     """
@@ -162,8 +180,12 @@ class EvaluationResult(BaseModel):
     metrics: dict[str, float]
     confusion_matrix: list[list[int]] | None = None
     class_labels: list[str] | None = None
-    y_true: list[float] | None = None
-    y_pred: list[float] | None = None
+    y_true: list[float | str | int] | None = None
+    y_pred: list[float | str | int] | None = None
+    y_score: list[list[float]] | None = None
+    score_type: Literal["probability", "decision"] | None = None
+    score_classes: list[str | int | float] | None = None
+    per_class_metrics: list[PerClassMetrics] | None = None
 
 
 class ExperimentOut(BaseModel):
@@ -197,8 +219,8 @@ class ExperimentOut(BaseModel):
         """Task-shaped evaluation block the frontend consumes."""
         if self.status != "completed" or self.metrics is None:
             return None
+        preds = self.predictions or {}
         if self.task_type == "regression":
-            preds = self.predictions or {}
             return EvaluationResult(
                 metrics=self.metrics,
                 y_true=preds.get("y_true"),
@@ -208,4 +230,10 @@ class ExperimentOut(BaseModel):
             metrics=self.metrics,
             confusion_matrix=self.confusion_matrix,
             class_labels=self.class_labels,
+            y_true=preds.get("y_true"),
+            y_pred=preds.get("y_pred"),
+            y_score=preds.get("y_score"),
+            score_type=preds.get("score_type"),
+            score_classes=preds.get("score_classes"),
+            per_class_metrics=preds.get("per_class_metrics"),
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -122,28 +123,54 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
         experiment.model_name, experiment.hyperparameters,
         random_state=experiment.random_state,
     )
+    fit_start = time.perf_counter()
     estimator.fit(X_train, y_train)
+    fit_duration_ms = (time.perf_counter() - fit_start) * 1000.0
+
     y_pred = estimator.predict(X_test)
 
-    training_info = _jsonable(ml_bridge.get_training_info(estimator))
-    y_score = ml_bridge.get_predict_scores(estimator, X_test)
+    feature_names = list(data.feature_names) if hasattr(data, "feature_names") else None
+    training_info = _jsonable(
+        ml_bridge.get_training_info(
+            estimator,
+            feature_names=feature_names,
+            fit_duration_ms=fit_duration_ms,
+        )
+    )
+
+    score_info = ml_bridge.get_predict_scores(estimator, X_test)
     class_labels = None if task_type == TASK_REGRESSION else list(data.target_names)
     evaluation = _jsonable(
         ml_bridge.evaluate(
-            task_type, y_test, y_pred, y_score=y_score, class_labels=class_labels
+            task_type,
+            y_test,
+            y_pred,
+            y_score=score_info.get("y_score") if score_info else None,
+            class_labels=class_labels,
         )
     )
     metrics = evaluation["metrics"]
     confusion_matrix = evaluation.get("confusion_matrix")
     eval_class_labels = evaluation.get("class_labels")
+    per_class_metrics = evaluation.get("per_class_metrics")
 
-    # Regression results carry raw y_true/y_pred for frontend scatter/residual
-    # plots. Classification uses the confusion matrix instead.
+    # Predictions block: regression keeps the original compact form;
+    # classification stores full y_true / y_pred plus score info and
+    # per-class metrics for downstream visualization.
     predictions = None
     if task_type == TASK_REGRESSION:
         predictions = {
             "y_true": _jsonable(list(y_test)),
             "y_pred": _jsonable(list(y_pred)),
+        }
+    else:
+        predictions = {
+            "y_true": _jsonable(list(y_test)),
+            "y_pred": _jsonable(list(y_pred)),
+            "y_score": _jsonable(score_info["y_score"]) if score_info else None,
+            "score_type": score_info["score_type"] if score_info else None,
+            "score_classes": _jsonable(score_info["score_classes"]) if score_info else None,
+            "per_class_metrics": per_class_metrics,
         }
 
     charts: list[dict[str, Any]] = []
@@ -165,6 +192,7 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
         "metrics": metrics,
         "confusion_matrix": confusion_matrix,
         "class_labels": eval_class_labels,
+        "per_class_metrics": per_class_metrics,
         "predictions": predictions,
         "training_info": training_info,
         "charts": charts,

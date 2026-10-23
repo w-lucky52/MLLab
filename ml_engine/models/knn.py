@@ -53,3 +53,9 @@ class KNNModel(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         return self._model.predict(X)
+
+    def predict_proba(self, X):
+        """Return class probabilities; columns follow ``classes_`` order."""
+        if self._model is None:
+            raise ValueError("KNNModel is not fitted. Call fit() first.")
+        return self._model.predict_proba(X)
