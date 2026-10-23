@@ -7,6 +7,7 @@ import { ArrowLeft, DataAnalysis, Download, RefreshRight, TrendCharts } from '@e
 import ClassificationPerformance from '@/components/result/ClassificationPerformance.vue'
 import ComingSoonPanel from '@/components/result/ComingSoonPanel.vue'
 import RegressionPerformance from '@/components/result/RegressionPerformance.vue'
+import TrainingProcess from '@/components/result/TrainingProcess.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -281,9 +282,11 @@ onBeforeUnmount(() => {
         </el-tab-pane>
 
         <el-tab-pane label="训练过程" name="training">
-          <ComingSoonPanel
-            title="训练过程"
-            description="训练过程将在下一阶段展示，包括损失曲线、迭代信息和超参数。"
+          <TrainingProcess
+            :model-name="experiment?.model_name || ''"
+            :hyperparameters="experiment?.hyperparameters"
+            :training-info="experiment?.training_info"
+            :active="activeTab === 'training'"
           />
         </el-tab-pane>
 
