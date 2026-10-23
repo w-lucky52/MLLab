@@ -133,6 +133,13 @@ class TrainingInfo(BaseModel):
     standardize: bool | None = None
     train_sample_count: int | None = None
     test_sample_count: int | None = None
+    # Class labels in their original ``classes_`` order. Regression models
+    # and older records leave this as ``None``.
+    classes: list[Any] | None = None
+    # Per-class feature means / variances (GaussianNB only). Both are stored
+    # together or omitted together.
+    class_feature_means: list[list[float]] | None = None
+    class_feature_variances: list[list[float]] | None = None
 
 
 # --- charts ------------------------------------------------------------------

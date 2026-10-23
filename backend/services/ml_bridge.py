@@ -307,6 +307,92 @@ def _finite_curve(value: Any) -> list[float] | None:
     return [float(item) for item in array]
 
 
+def _jsonable_classes(estimator: Any) -> list[Any] | None:
+    """Return ``classes_`` in its original order as native JSON values.
+
+    Only integer / finite float / string labels are accepted. A missing,
+    empty, non 1-D or non-finite ``classes_`` yields ``None`` so no unreliable
+    class list is ever written. The order is never sorted or re-encoded.
+    """
+    import math
+
+    import numpy as np
+
+    if not hasattr(estimator, "classes_"):
+        return None
+    try:
+        classes = np.asarray(getattr(estimator, "classes_"), dtype=object)
+    except (TypeError, ValueError):
+        return None
+    if classes.ndim != 1 or classes.size == 0:
+        return None
+
+    converted: list[Any] = []
+    for item in classes.tolist():
+        try:
+            value = _to_jsonable(item)
+        except (TypeError, ValueError):
+            return None
+        if isinstance(value, bool):
+            converted.append(value)
+        elif isinstance(value, int):
+            converted.append(value)
+        elif isinstance(value, float):
+            if not math.isfinite(value):
+                return None
+            converted.append(value)
+        elif isinstance(value, str):
+            converted.append(value)
+        else:
+            return None
+    return converted or None
+
+
+def _class_feature_statistics(
+    estimator: Any,
+    classes: list[Any] | None,
+    feature_names: list[str] | None = None,
+    n_features_in: int | None = None,
+) -> tuple[list[list[float]], list[list[float]]] | None:
+    """Return ``(means, variances)`` from GaussianNB-style attributes.
+
+    Both ``theta_`` and ``var_`` must exist, be non-empty 2-D finite matrices
+    with identical shapes, one row per class and a consistent column count.
+    Any failed check yields ``None`` so a half-finished pair is never stored.
+    """
+    import numpy as np
+
+    if not classes:
+        return None
+
+    try:
+        theta = np.asarray(estimator.theta_, dtype=float)
+        variances = np.asarray(estimator.var_, dtype=float)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+    if theta.ndim != 2 or variances.ndim != 2:
+        return None
+    if theta.size == 0 or variances.size == 0:
+        return None
+    if theta.shape != variances.shape:
+        return None
+    if theta.shape[0] != len(classes):
+        return None
+
+    n_features = theta.shape[1]
+    if n_features <= 0:
+        return None
+    if n_features_in is not None and n_features != int(n_features_in):
+        return None
+    if feature_names is not None and n_features != len(feature_names):
+        return None
+    if not np.all(np.isfinite(theta)) or not np.all(np.isfinite(variances)):
+        return None
+
+    return theta.tolist(), variances.tolist()
+
+
 def get_training_info(
     estimator: Any,
     feature_names: list[str] | None = None,
@@ -344,11 +430,20 @@ def get_training_info(
     arguments actually held by the estimator (see
     :func:`get_effective_parameters`). Fields are omitted when unknown.
 
+    Class labels are recorded as ``classes`` in their original ``classes_``
+    order (see :func:`_jsonable_classes`); regression models expose no
+    ``classes_`` and therefore no ``classes`` key. GaussianNB-style
+    estimators additionally store ``class_feature_means`` (``theta_``) and
+    ``class_feature_variances`` (``var_``) as a validated pair; when any
+    consistency check fails both keys are omitted (see
+    :func:`_class_feature_statistics`).
+
     Layer-list weights (``coefs_`` / ``intercepts_`` as exposed by
     ``MLPClassifier``) are intentionally NOT mapped: per-layer shapes would
     break the ``TrainingInfo.coefficients`` contract, and hidden-layer
     weights have no display value. For the MLP the training info is limited
-    to ``loss_history`` / ``n_iter`` / ``stop_reason`` / ``n_features_in``.
+    to ``loss_history`` / ``n_iter`` / ``stop_reason`` / ``n_features_in`` /
+    ``classes``.
     """
     import numpy as np
 
@@ -393,6 +488,20 @@ def get_training_info(
         info["train_sample_count"] = int(train_sample_count)
     if test_sample_count is not None:
         info["test_sample_count"] = int(test_sample_count)
+
+    classes = _jsonable_classes(estimator)
+    if classes is not None:
+        info["classes"] = classes
+
+    statistics = _class_feature_statistics(
+        estimator,
+        classes,
+        feature_names=feature_names,
+        n_features_in=info.get("n_features_in"),
+    )
+    if statistics is not None:
+        info["class_feature_means"], info["class_feature_variances"] = statistics
+
     info["resolved_parameters"] = get_effective_parameters(estimator)
     return info
 
