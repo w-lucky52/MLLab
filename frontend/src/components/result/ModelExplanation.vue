@@ -15,6 +15,7 @@ const props = defineProps({
   taskType: { type: String, default: '' },
   trainingInfo: { type: Object, default: null },
   scoreClasses: { type: Array, default: null },
+  scoreClassNames: { type: Array, default: null },
   active: { type: Boolean, default: true },
 })
 
@@ -52,6 +53,7 @@ const standardize = computed(() => info.value.standardize === true)
         :feature-names="info.feature_names"
         :classes="info.classes"
         :score-classes="scoreClasses"
+        :score-class-names="scoreClassNames"
         :intercept="info.intercept"
         :model-name="modelName"
         :standardize="standardize"
@@ -72,6 +74,7 @@ const standardize = computed(() => info.value.standardize === true)
         :training-info="info"
         :feature-names="info.feature_names"
         :score-classes="scoreClasses"
+        :score-class-names="scoreClassNames"
         :active="active"
       />
     </template>

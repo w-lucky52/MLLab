@@ -146,6 +146,7 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
 
     score_info = ml_bridge.get_predict_scores(estimator, X_test)
     class_labels = None if task_type == TASK_REGRESSION else list(data.target_names)
+    score_class_names = _score_class_names(task_type, score_info, data.target_names)
     evaluation = _jsonable(
         ml_bridge.evaluate(
             task_type,
@@ -176,6 +177,7 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
             "y_score": _jsonable(score_info["y_score"]) if score_info else None,
             "score_type": score_info["score_type"] if score_info else None,
             "score_classes": _jsonable(score_info["score_classes"]) if score_info else None,
+            "score_class_names": score_class_names,
             "per_class_metrics": per_class_metrics,
         }
 
@@ -212,6 +214,24 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
         "task_type": task_type,
         "artifact_dir": artifact_subdir,
     }
+
+
+def _score_class_names(
+    task_type: str,
+    score_info: dict[str, Any] | None,
+    target_names: Any,
+) -> list[str] | None:
+    """Display-only class names for classification score columns.
+
+    Regression experiments and experiments without prediction scores never
+    receive names. The mapping itself is validated in
+    :func:`ml_bridge.resolve_score_class_names`.
+    """
+    if task_type == TASK_REGRESSION or not score_info:
+        return None
+    return ml_bridge.resolve_score_class_names(
+        score_info.get("score_classes"), target_names
+    )
 
 
 def _write_summary(

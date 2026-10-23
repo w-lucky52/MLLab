@@ -296,6 +296,7 @@ onBeforeUnmount(() => {
             :task-type="isRegression ? 'regression' : 'classification'"
             :training-info="experiment?.training_info"
             :score-classes="evaluation?.score_classes"
+            :score-class-names="evaluation?.score_class_names"
             :active="activeTab === 'interpretation'"
           />
         </el-tab-pane>

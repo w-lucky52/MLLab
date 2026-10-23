@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
 import { formatNumber } from '@/utils/training'
+import { classDisplayLookup, classDisplayName } from '@/utils/classDisplay'
 import {
   classNameNotice,
   explanationNotes,
@@ -16,19 +17,35 @@ const props = defineProps({
   trainingInfo: { type: Object, default: null },
   featureNames: { type: Array, default: null },
   scoreClasses: { type: Array, default: null },
+  scoreClassNames: { type: Array, default: null },
   active: { type: Boolean, default: true },
 })
 
 const chartEl = ref(null)
 const mode = ref('mean')
 
-const data = computed(() =>
-  gaussianExplanationData({
+const displayLookup = computed(() =>
+  classDisplayLookup(props.scoreClasses, props.scoreClassNames),
+)
+
+const data = computed(() => {
+  const resolved = gaussianExplanationData({
     trainingInfo: props.trainingInfo,
     featureNames: props.featureNames,
     scoreClasses: props.scoreClasses,
-  }),
-)
+  })
+  if (!resolved) return null
+  // Row order stays untouched; only the class labels change for display.
+  return {
+    ...resolved,
+    classes: {
+      ...resolved.classes,
+      names: resolved.classes.names.map((name) =>
+        classDisplayName(name, displayLookup.value),
+      ),
+    },
+  }
+})
 
 const matrix = computed(() => {
   if (!data.value) return null
@@ -174,7 +191,7 @@ watch(mode, () => {
 })
 
 watch(
-  () => [props.trainingInfo, props.featureNames, props.scoreClasses],
+  () => [props.trainingInfo, props.featureNames, props.scoreClasses, props.scoreClassNames],
   () => {
     mount()
   },

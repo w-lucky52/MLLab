@@ -3,6 +3,10 @@ import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
 import { formatNumber } from '@/utils/training'
 import {
+  classDisplayLookup,
+  classDisplayName,
+} from '@/utils/classDisplay'
+import {
   classNameNotice,
   explanationNotes,
   featureNameNotice,
@@ -19,6 +23,7 @@ const props = defineProps({
   featureNames: { type: Array, default: null },
   classes: { type: Array, default: null },
   scoreClasses: { type: Array, default: null },
+  scoreClassNames: { type: Array, default: null },
   intercept: { type: [Array, Number], default: null },
   modelName: { type: String, default: 'logistic_regression' },
   standardize: { type: Boolean, default: false },
@@ -31,9 +36,18 @@ const matrix = computed(() => normalizeMatrix(props.coefficients))
 const cells = computed(() => heatmapCells(props.coefficients))
 const range = computed(() => symmetricRange(props.coefficients))
 
+const displayLookup = computed(() =>
+  classDisplayLookup(props.scoreClasses, props.scoreClassNames),
+)
+
 const classNames = computed(() => {
   const rowCount = matrix.value?.rowCount ?? 0
-  return normalizeClassNames(props.classes, props.scoreClasses, rowCount)
+  const resolved = normalizeClassNames(props.classes, props.scoreClasses, rowCount)
+  // Row order stays untouched; only the labels are swapped for display names.
+  return {
+    ...resolved,
+    names: resolved.names.map((name) => classDisplayName(name, displayLookup.value)),
+  }
 })
 
 const featureNames = computed(() => {
@@ -160,7 +174,13 @@ const { mount } = useChart(
 )
 
 watch(
-  () => [props.coefficients, props.featureNames, props.classes, props.scoreClasses],
+  () => [
+    props.coefficients,
+    props.featureNames,
+    props.classes,
+    props.scoreClasses,
+    props.scoreClassNames,
+  ],
   () => {
     mount()
   },

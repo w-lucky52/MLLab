@@ -1,10 +1,13 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
+import { classDisplayLookup, classDisplayName } from '@/utils/classDisplay'
 
 const props = defineProps({
   confusionMatrix: { type: Array, default: null },
   classLabels: { type: Array, default: null },
+  scoreClasses: { type: Array, default: null },
+  scoreClassNames: { type: Array, default: null },
   active: { type: Boolean, default: true },
 })
 
@@ -23,9 +26,17 @@ const matrix = computed(() => {
 
 const hasData = computed(() => matrix.value.length > 0)
 
+const displayLookup = computed(() =>
+  classDisplayLookup(props.scoreClasses, props.scoreClassNames),
+)
+
 const labels = computed(() => {
   const source = Array.isArray(props.classLabels) ? props.classLabels.map(String) : []
-  if (source.length === matrix.value.length) return source
+  if (source.length === matrix.value.length) {
+    // Labels that are raw class values (e.g. "0"/"1"/"2") are mapped to
+    // friendly names; already-friendly labels are left untouched.
+    return source.map((label) => classDisplayName(label, displayLookup.value))
+  }
   return matrix.value.map((_, index) => `类别 ${index + 1}`)
 })
 
@@ -133,7 +144,7 @@ watch(mode, () => {
 })
 
 watch(
-  () => [props.confusionMatrix, props.classLabels],
+  () => [props.confusionMatrix, props.classLabels, props.scoreClasses, props.scoreClassNames],
   () => {
     mount()
   },

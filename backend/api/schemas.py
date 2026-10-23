@@ -199,6 +199,10 @@ class EvaluationResult(BaseModel):
     y_score: list[list[float]] | None = None
     score_type: Literal["probability", "decision"] | None = None
     score_classes: list[str | int | float] | None = None
+    # Friendly display names aligned with ``score_classes`` (same order).
+    # Display only: scoring, ROC and the confusion matrix keep using
+    # ``score_classes``. ``None`` for regression or older records.
+    score_class_names: list[str] | None = None
     per_class_metrics: list[PerClassMetrics] | None = None
 
 
@@ -249,5 +253,6 @@ class ExperimentOut(BaseModel):
             y_score=preds.get("y_score"),
             score_type=preds.get("score_type"),
             score_classes=preds.get("score_classes"),
+            score_class_names=preds.get("score_class_names"),
             per_class_metrics=preds.get("per_class_metrics"),
         )

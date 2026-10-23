@@ -1,9 +1,12 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
+import { classDisplayLookup, classDisplayName } from '@/utils/classDisplay'
 
 const props = defineProps({
   perClassMetrics: { type: Array, default: null },
+  scoreClasses: { type: Array, default: null },
+  scoreClassNames: { type: Array, default: null },
   active: { type: Boolean, default: true },
 })
 
@@ -12,6 +15,10 @@ const chartEl = ref(null)
 const items = computed(() => (Array.isArray(props.perClassMetrics) ? props.perClassMetrics : []))
 const hasData = computed(() => items.value.length > 0)
 
+const displayLookup = computed(() =>
+  classDisplayLookup(props.scoreClasses, props.scoreClassNames),
+)
+
 const toNumber = (value) => {
   const result = Number(value)
   return Number.isFinite(result) ? result : 0
@@ -19,7 +26,12 @@ const toNumber = (value) => {
 
 const toPercent = (value) => Number((toNumber(value) * 100).toFixed(2))
 
-const classLabel = (item, index) => String(item?.class ?? `类别 ${index + 1}`)
+const classLabel = (item, index) => {
+  if (item?.class !== undefined && item?.class !== null) {
+    return classDisplayName(item.class, displayLookup.value)
+  }
+  return `类别 ${index + 1}`
+}
 
 const buildOption = () => {
   const rows = items.value
@@ -116,7 +128,7 @@ const { mount } = useChart(
 )
 
 watch(
-  () => props.perClassMetrics,
+  () => [props.perClassMetrics, props.scoreClasses, props.scoreClassNames],
   () => {
     mount()
   },

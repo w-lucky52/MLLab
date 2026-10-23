@@ -7,7 +7,7 @@
  * or re-ordered silently, and no business feature name is ever guessed.
  */
 
-import { UNRECORDED, formatNumber, toFiniteNumber, toInteger } from './training'
+import { UNRECORDED, formatNumber, toFiniteNumber, toInteger } from './training.js'
 
 export const POSITIONAL_FEATURE_PREFIX = '特征'
 export const POSITIONAL_CLASS_PREFIX = '类别'

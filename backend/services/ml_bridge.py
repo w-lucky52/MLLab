@@ -506,6 +506,69 @@ def get_training_info(
     return info
 
 
+def resolve_score_class_names(
+    score_classes: Any,
+    target_names: Any,
+) -> list[str] | None:
+    """Map numeric ``score_classes`` to ``target_names`` for display only.
+
+    Returns ``None`` unless the mapping is provable:
+
+    1. ``score_classes`` is a non-empty 1-D sequence;
+    2. ``target_names`` is a non-empty 1-D sequence of non-empty strings;
+    3. every class is an int (or a finite float equal to an integer) whose
+       value lies in ``[0, len(target_names))``.
+
+    Floating-point indices, negative classes (e.g. ``-1`` / ``1``), string
+    classes and non-contiguous classes that fall outside ``target_names`` are
+    rejected as a whole: no partial list is ever returned and nothing is
+    mapped by position alone. The original ``score_classes`` are never
+    modified; the returned list only gives display names in the same order.
+    """
+    import math
+
+    import numpy as np
+
+    if score_classes is None or target_names is None:
+        return None
+
+    try:
+        classes = np.asarray(score_classes, dtype=object)
+        names = np.asarray(target_names, dtype=object)
+    except (TypeError, ValueError):
+        return None
+
+    if classes.ndim != 1 or classes.size == 0:
+        return None
+    if names.ndim != 1 or names.size == 0:
+        return None
+
+    name_list = names.tolist()
+    if not all(isinstance(name, str) and name.strip() for name in name_list):
+        return None
+
+    resolved: list[str] = []
+    for item in classes.tolist():
+        # ``bool`` is a subclass of ``int`` but is never a dataset class index.
+        if isinstance(item, bool):
+            return None
+        if isinstance(item, (int, np.integer)):
+            index = int(item)
+        elif isinstance(item, (float, np.floating)):
+            value = float(item)
+            if not math.isfinite(value) or value != int(value):
+                return None
+            index = int(value)
+        else:
+            return None
+
+        if index < 0 or index >= len(name_list):
+            return None
+        resolved.append(name_list[index])
+
+    return resolved
+
+
 def get_predict_scores(estimator: Any, X: Any) -> dict[str, Any] | None:
     """Return structured prediction scores, or ``None``.
 

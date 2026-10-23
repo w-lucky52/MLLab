@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { calculateOvRRoc } from '@/utils/roc'
+import { classDisplayLookup, classDisplayName } from '@/utils/classDisplay'
 import { useChart } from './useChart'
 
 const props = defineProps({
@@ -8,10 +9,15 @@ const props = defineProps({
   yScore: { type: Array, default: null },
   scoreType: { type: String, default: null },
   scoreClasses: { type: Array, default: null },
+  scoreClassNames: { type: Array, default: null },
   active: { type: Boolean, default: true },
 })
 
 const chartEl = ref(null)
+
+const displayLookup = computed(() =>
+  classDisplayLookup(props.scoreClasses, props.scoreClassNames),
+)
 
 const validationIssue = computed(() => {
   const trueLabels = Array.isArray(props.yTrue) ? props.yTrue : []
@@ -62,7 +68,9 @@ const scoreTag = computed(() => {
   return props.scoreType === 'decision' ? '决策分数（非概率）' : '预测概率'
 })
 
-const curveName = (curve) => `${curve.classLabel}（AUC ${curve.auc.toFixed(3)}）`
+// Display names only: the ROC calculation keeps using raw scoreClasses.
+const curveName = (curve) =>
+  `${classDisplayName(curve.classLabel, displayLookup.value)}（AUC ${curve.auc.toFixed(3)}）`
 
 const buildOption = () => {
   const curves = calculation.value.curves
@@ -141,7 +149,7 @@ const { mount } = useChart(
 )
 
 watch(
-  () => [props.yTrue, props.yScore, props.scoreClasses],
+  () => [props.yTrue, props.yScore, props.scoreClasses, props.scoreClassNames],
   () => {
     mount()
   },

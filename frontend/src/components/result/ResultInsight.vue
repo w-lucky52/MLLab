@@ -1,13 +1,20 @@
 <script setup>
 import { computed } from 'vue'
 import { TrendCharts } from '@element-plus/icons-vue'
+import { classDisplayLookup, classDisplayName } from '@/utils/classDisplay'
 
 const props = defineProps({
   metrics: { type: Object, default: null },
   perClassMetrics: { type: Array, default: null },
   confusionMatrix: { type: Array, default: null },
   classLabels: { type: Array, default: null },
+  scoreClasses: { type: Array, default: null },
+  scoreClassNames: { type: Array, default: null },
 })
+
+const displayLookup = computed(() =>
+  classDisplayLookup(props.scoreClasses, props.scoreClassNames),
+)
 
 const toNumber = (value) => {
   if (value === null || value === undefined || value === '') return null
@@ -19,7 +26,7 @@ const formatPercent = (value) => `${((toNumber(value) ?? 0) * 100).toFixed(2)}%`
 
 const labelOf = (labels, index) => {
   if (Array.isArray(labels) && labels[index] !== undefined && labels[index] !== null) {
-    return String(labels[index])
+    return classDisplayName(labels[index], displayLookup.value)
   }
   return `类别 ${index + 1}`
 }

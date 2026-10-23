@@ -14,12 +14,19 @@ const field = (key) => props.evaluation?.[key] ?? null
 
 <template>
   <div class="classification-performance">
-    <PerClassMetricsChart :per-class-metrics="field('per_class_metrics')" :active="active" />
+    <PerClassMetricsChart
+      :per-class-metrics="field('per_class_metrics')"
+      :score-classes="field('score_classes')"
+      :score-class-names="field('score_class_names')"
+      :active="active"
+    />
 
     <div class="performance-row">
       <ConfusionMatrixChart
         :confusion-matrix="field('confusion_matrix')"
         :class-labels="field('class_labels')"
+        :score-classes="field('score_classes')"
+        :score-class-names="field('score_class_names')"
         :active="active"
       />
 
@@ -28,6 +35,7 @@ const field = (key) => props.evaluation?.[key] ?? null
         :y-score="field('y_score')"
         :score-type="field('score_type')"
         :score-classes="field('score_classes')"
+        :score-class-names="field('score_class_names')"
         :active="active"
       />
     </div>
@@ -37,6 +45,8 @@ const field = (key) => props.evaluation?.[key] ?? null
       :per-class-metrics="field('per_class_metrics')"
       :confusion-matrix="field('confusion_matrix')"
       :class-labels="field('class_labels')"
+      :score-classes="field('score_classes')"
+      :score-class-names="field('score_class_names')"
     />
   </div>
 </template>
