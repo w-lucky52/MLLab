@@ -1,25 +1,18 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
-import {
-  ArrowLeft,
-  DataAnalysis,
-  Download,
-  RefreshRight,
-  TrendCharts,
-} from '@element-plus/icons-vue'
+import { ArrowLeft, DataAnalysis, Download, RefreshRight, TrendCharts } from '@element-plus/icons-vue'
+
+import ClassificationPerformance from '@/components/result/ClassificationPerformance.vue'
+import ComingSoonPanel from '@/components/result/ComingSoonPanel.vue'
+import RegressionPerformance from '@/components/result/RegressionPerformance.vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const experiment = ref(null)
-const metricChartRef = ref(null)
-const matrixChartRef = ref(null)
-
-let metricChart = null
-let matrixChart = null
+const activeTab = ref('performance')
 let pollTimer = null
 
 const datasetNameMap = {
@@ -148,282 +141,6 @@ const metrics = computed(() => {
   ]
 })
 
-const resultOverviewTitle = computed(() => {
-  if (!hasResult.value) return '实验运行中'
-
-  if (isRegression.value) {
-    const r2 = metrics.value[3]?.value || 0
-    return r2 >= 0.7 ? '模型拟合表现良好' : '模型实验已完成'
-  }
-
-  const accuracy = metrics.value[0]?.value || 0
-  return accuracy >= 90 ? '模型整体表现良好' : '模型实验已完成'
-})
-
-const resultOverviewText = computed(() => {
-  if (!hasResult.value) {
-    return '正在等待后端返回实验结果。'
-  }
-
-  if (isRegression.value) {
-    return `本次真实实验中，模型的 MAE 为 ${metrics.value[0]?.value}，RMSE 为 ${metrics.value[2]?.value}，R² 为 ${metrics.value[3]?.value}。可继续调整参数或更换算法进行对比实验。`
-  }
-
-  return `本次真实实验中，模型准确率为 ${metrics.value[0]?.value}%，加权精确率为 ${metrics.value[1]?.value}%，加权召回率为 ${metrics.value[2]?.value}%，加权 F1 为 ${metrics.value[3]?.value}%。可继续调整参数或更换算法进行对比实验。`
-})
-const initMetricChart = () => {
-  if (!metricChartRef.value || !hasResult.value) return
-
-  metricChart?.dispose()
-  metricChart = echarts.init(metricChartRef.value)
-
-  metricChart.setOption({
-    animationDuration: 900,
-    grid: {
-      top: 25,
-      right: 18,
-      bottom: 35,
-      left: 58,
-    },
-    tooltip: {
-      trigger: 'axis',
-      formatter: (params) => {
-        const item = Array.isArray(params) ? params[0] : params
-        const unit = isRegression.value ? '' : '%'
-        return `${item.name}<br/>${item.seriesName}：${toNumber(item.value).toFixed(2)}${unit}`
-      },
-    },
-    xAxis: {
-      type: 'category',
-      data: metrics.value.map((item) => item.name),
-      axisTick: {
-        show: false,
-      },
-      axisLine: {
-        lineStyle: {
-          color: '#dbe3ef',
-        },
-      },
-      axisLabel: {
-        color: '#64748b',
-      },
-    },
-    yAxis: {
-      type: 'value',
-      min: 0,
-      max: isRegression.value ? undefined : 100,
-      axisLabel: {
-        color: '#94a3b8',
-        formatter: (value) => {
-          return isRegression.value ? value : `${value}%`
-        },
-      },
-      splitLine: {
-        lineStyle: {
-          color: '#edf2f7',
-        },
-      },
-    },
-    series: [
-      {
-        name: '评估指标',
-        type: 'bar',
-        barWidth: 38,
-        data: metrics.value.map((item) => item.value),
-        itemStyle: {
-          borderRadius: [9, 9, 2, 2],
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            {
-              offset: 0,
-              color: '#6366f1',
-            },
-            {
-              offset: 1,
-              color: '#3b82f6',
-            },
-          ]),
-        },
-      },
-    ],
-  })
-}
-
-const initClassificationChart = () => {
-  const matrix = evaluation.value?.confusion_matrix || []
-  const labels = evaluation.value?.class_labels || []
-
-  const matrixData = matrix.flatMap((row, rowIndex) =>
-    row.map((value, columnIndex) => [columnIndex, rowIndex, value]),
-  )
-
-  const displayLabels = labels.length
-    ? labels.map((label) => String(label))
-    : matrix.map((_, index) => `类别 ${index + 1}`)
-
-  const maximum = Math.max(1, ...matrixData.map((item) => toNumber(item[2])))
-
-  matrixChart.setOption({
-    animationDuration: 900,
-    tooltip: {
-      position: 'top',
-      formatter: (params) => {
-        const predicted = displayLabels[params.value[0]]
-        const actual = displayLabels[params.value[1]]
-
-        return `真实类别：${actual}<br/>预测类别：${predicted}<br/>样本数：${params.value[2]}`
-      },
-    },
-    grid: {
-      top: 30,
-      right: 30,
-      bottom: 65,
-      left: 70,
-    },
-    xAxis: {
-      type: 'category',
-      data: displayLabels,
-      name: '预测类别',
-      nameLocation: 'middle',
-      nameGap: 38,
-      splitArea: {
-        show: true,
-      },
-      axisLabel: {
-        color: '#64748b',
-      },
-    },
-    yAxis: {
-      type: 'category',
-      data: displayLabels,
-      name: '真实类别',
-      nameLocation: 'middle',
-      nameGap: 50,
-      splitArea: {
-        show: true,
-      },
-      axisLabel: {
-        color: '#64748b',
-      },
-    },
-    visualMap: {
-      min: 0,
-      max: maximum,
-      show: false,
-      inRange: {
-        color: ['#eff6ff', '#93c5fd', '#2563eb'],
-      },
-    },
-    series: [
-      {
-        name: '混淆矩阵',
-        type: 'heatmap',
-        data: matrixData,
-        label: {
-          show: true,
-          color: '#0f172a',
-          fontWeight: 700,
-        },
-      },
-    ],
-  })
-}
-
-const initRegressionChart = () => {
-  const yTrue = evaluation.value?.y_true || []
-  const yPred = evaluation.value?.y_pred || []
-
-  const scatterData = yTrue.map((value, index) => [toNumber(value), toNumber(yPred[index])])
-
-  const allValues = scatterData.flat()
-  const minimum = Math.min(...allValues)
-  const maximum = Math.max(...allValues)
-
-  matrixChart.setOption({
-    animationDuration: 900,
-    tooltip: {
-      trigger: 'item',
-      formatter: (params) => {
-        return `真实值：${params.value[0].toFixed(2)}<br/>预测值：${params.value[1].toFixed(2)}`
-      },
-    },
-    grid: {
-      top: 30,
-      right: 30,
-      bottom: 60,
-      left: 70,
-    },
-    xAxis: {
-      type: 'value',
-      name: '真实值',
-      nameLocation: 'middle',
-      nameGap: 38,
-      splitLine: {
-        lineStyle: {
-          color: '#edf2f7',
-        },
-      },
-    },
-    yAxis: {
-      type: 'value',
-      name: '预测值',
-      nameLocation: 'middle',
-      nameGap: 50,
-      splitLine: {
-        lineStyle: {
-          color: '#edf2f7',
-        },
-      },
-    },
-    series: [
-      {
-        name: '预测样本',
-        type: 'scatter',
-        symbolSize: 10,
-        data: scatterData,
-        itemStyle: {
-          color: '#3b82f6',
-          opacity: 0.75,
-        },
-      },
-      {
-        name: '理想预测线',
-        type: 'line',
-        data: [
-          [minimum, minimum],
-          [maximum, maximum],
-        ],
-        symbol: 'none',
-        lineStyle: {
-          color: '#ef4444',
-          type: 'dashed',
-          width: 2,
-        },
-      },
-    ],
-  })
-}
-
-const initResultChart = () => {
-  if (!matrixChartRef.value || !hasResult.value) return
-
-  matrixChart?.dispose()
-  matrixChart = echarts.init(matrixChartRef.value)
-
-  if (isRegression.value) {
-    initRegressionChart()
-  } else {
-    initClassificationChart()
-  }
-}
-
-const initCharts = async () => {
-  if (!hasResult.value) return
-
-  await nextTick()
-  initMetricChart()
-  initResultChart()
-}
-
 const fetchExperiment = async () => {
   clearTimeout(pollTimer)
 
@@ -440,7 +157,6 @@ const fetchExperiment = async () => {
     experiment.value = data
 
     if (data.status === 'completed') {
-      await initCharts()
       return
     }
 
@@ -455,35 +171,25 @@ const fetchExperiment = async () => {
   }
 }
 
-const resizeCharts = () => {
-  metricChart?.resize()
-  matrixChart?.resize()
-}
-
 const exportResult = () => {
   ElMessage.info('结果导出功能将在后续步骤接入')
 }
 
 onMounted(() => {
   fetchExperiment()
-  window.addEventListener('resize', resizeCharts)
 })
 
 watch(
   () => route.params.id,
   () => {
     experiment.value = null
-    metricChart?.dispose()
-    matrixChart?.dispose()
+    activeTab.value = 'performance'
     fetchExperiment()
   },
 )
 
 onBeforeUnmount(() => {
   clearTimeout(pollTimer)
-  window.removeEventListener('resize', resizeCharts)
-  metricChart?.dispose()
-  matrixChart?.dispose()
 })
 </script>
 
@@ -554,64 +260,40 @@ onBeforeUnmount(() => {
 
           <div class="metric-footer">
             <span>{{ metric.change }}</span>
-            <small>相比基准模型</small>
           </div>
         </el-card>
       </section>
 
-      <section class="chart-grid">
-        <el-card class="chart-card metric-chart-card" shadow="never">
-          <template #header>
-            <div class="card-header">
-              <div>
-                <h3>模型评估指标</h3>
-                <p>
-                  {{ isRegression ? '各项回归指标的综合表现' : '各项分类指标的综合表现' }}
-                </p>
-              </div>
+      <el-tabs v-model="activeTab" class="result-tabs">
+        <el-tab-pane :label="isRegression ? '回归表现' : '分类表现'" name="performance">
+          <RegressionPerformance
+            v-if="isRegression"
+            :y-true="evaluation?.y_true"
+            :y-pred="evaluation?.y_pred"
+            :active="activeTab === 'performance'"
+          />
 
-              <el-tag effect="plain" round>
-                {{ isRegression ? '回归结果' : '百分比' }}
-              </el-tag>
-            </div>
-          </template>
+          <ClassificationPerformance
+            v-else
+            :evaluation="evaluation"
+            :active="activeTab === 'performance'"
+          />
+        </el-tab-pane>
 
-          <div ref="metricChartRef" class="chart"></div>
-        </el-card>
+        <el-tab-pane label="训练过程" name="training">
+          <ComingSoonPanel
+            title="训练过程"
+            description="训练过程将在下一阶段展示，包括损失曲线、迭代信息和超参数。"
+          />
+        </el-tab-pane>
 
-        <el-card class="chart-card" shadow="never">
-          <template #header>
-            <div class="card-header">
-              <div>
-                <h3>{{ isRegression ? '真实值与预测值' : '混淆矩阵' }}</h3>
-                <p>
-                  {{
-                    isRegression ? '预测结果与真实目标值的对应关系' : '真实类别与预测类别的对应关系'
-                  }}
-                </p>
-              </div>
-
-              <el-tag effect="plain" round>
-                {{ isRegression ? '回归结果' : '分类结果' }}
-              </el-tag>
-            </div>
-          </template>
-
-          <div ref="matrixChartRef" class="chart"></div>
-        </el-card>
-      </section>
-
-      <section class="analysis-card">
-        <div class="analysis-icon">
-          <el-icon><TrendCharts /></el-icon>
-        </div>
-
-        <div>
-          <span>结果概览</span>
-          <h3>{{ resultOverviewTitle }}</h3>
-          <p>{{ resultOverviewText }}</p>
-        </div>
-      </section>
+        <el-tab-pane label="模型解释" name="interpretation">
+          <ComingSoonPanel
+            title="模型解释"
+            description="模型解释将在下一阶段展示，包括模型结构和可解释参数。"
+          />
+        </el-tab-pane>
+      </el-tabs>
 
       <footer class="page-actions">
         <el-button
@@ -693,11 +375,6 @@ onBeforeUnmount(() => {
   min-height: 430px;
 }
 
-.result-alert {
-  margin-top: 22px;
-  border-radius: 13px;
-}
-
 .experiment-summary {
   display: grid;
   grid-template-columns: 1.8fr repeat(3, 1fr);
@@ -720,20 +397,16 @@ onBeforeUnmount(() => {
   gap: 14px;
 }
 
-.summary-icon,
-.analysis-icon {
-  display: grid;
-  flex: none;
-  place-items: center;
-}
-
 .summary-icon {
+  display: grid;
   width: 48px;
   height: 48px;
+  flex: none;
   color: #059669;
   font-size: 22px;
   border-radius: 14px;
   background: #ecfdf5;
+  place-items: center;
 }
 
 .summary-main span,
@@ -864,90 +537,22 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-.metric-footer small {
-  color: #94a3b8;
+.result-tabs {
+  margin-top: 22px;
 }
 
-.chart-grid {
-  display: grid;
-  grid-template-columns: 1.25fr 0.75fr;
-  gap: 18px;
-  margin-top: 20px;
+.result-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
 }
 
-.chart-grid.single-chart {
-  grid-template-columns: 1fr;
-}
-.chart-card :deep(.el-card__header) {
-  padding: 20px 22px;
+.result-tabs :deep(.el-tabs__item) {
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.chart-card :deep(.el-card__body) {
-  padding: 5px 16px 15px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.card-header h3 {
-  margin: 0 0 6px;
-  color: #1e293b;
-  font-size: 15px;
-}
-
-.card-header p {
-  margin: 0;
-  color: #94a3b8;
-  font-size: 11px;
-}
-
-.chart {
-  width: 100%;
-  height: 330px;
-}
-
-.analysis-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 17px;
-  padding: 22px 24px;
-  margin-top: 20px;
-  border: 1px solid #dbeafe;
-  border-radius: 17px;
-  background: linear-gradient(135deg, #eff6ff, #f8faff);
-}
-
-.analysis-icon {
-  width: 46px;
-  height: 46px;
-  color: #2563eb;
-  font-size: 21px;
-  border-radius: 14px;
-  background: white;
-  box-shadow: 0 8px 20px rgb(37 99 235 / 10%);
-}
-
-.analysis-card span {
-  color: #3b82f6;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.2px;
-}
-
-.analysis-card h3 {
-  margin: 5px 0 7px;
-  color: #1e3a8a;
-  font-size: 16px;
-}
-
-.analysis-card p {
-  margin: 0;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.7;
+.result-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+  background-color: #e8edf5;
 }
 
 .page-actions {
@@ -963,8 +568,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1000px) {
   .experiment-summary,
-  .metrics-grid,
-  .chart-grid {
+  .metrics-grid {
     grid-template-columns: 1fr;
   }
 
