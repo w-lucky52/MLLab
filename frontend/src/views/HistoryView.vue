@@ -418,13 +418,13 @@ onMounted(fetchExperiments)
   color: white;
   border-radius: 20px;
   background:
-    radial-gradient(circle at 82% 10%, rgb(192 132 252 / 25%), transparent 30%),
-    linear-gradient(120deg, #3b0764, #6d28d9);
-  box-shadow: 0 20px 45px rgb(109 40 217 / 14%);
+    radial-gradient(circle at 80% 10%, rgb(96 165 250 / 25%), transparent 30%),
+    linear-gradient(120deg, #172554, #1e40af);
+  box-shadow: 0 20px 45px rgb(30 64 175 / 14%);
 }
 
 .eyebrow {
-  color: #d8b4fe;
+  color: #93c5fd;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.8px;
@@ -437,7 +437,7 @@ onMounted(fetchExperiments)
 
 .page-heading p {
   margin: 0;
-  color: #e9d5ff;
+  color: #cbd5e1;
 }
 
 .history-alert {

@@ -58,19 +58,6 @@
     </el-aside>
 
     <el-container class="workspace">
-      <el-header class="topbar">
-        <div>
-          <div class="page-caption">机器学习实验平台</div>
-          <div class="page-title">让模型实验更简单、更直观</div>
-        </div>
-
-        <div class="topbar-actions">
-          <el-tag round effect="light" type="success"> 系统运行中 </el-tag>
-
-          <el-avatar class="avatar">ML</el-avatar>
-        </div>
-      </el-header>
-
       <el-main class="main-content">
         <div class="page-container">
           <router-view />
@@ -203,44 +190,8 @@
   margin-left: 248px;
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 86px;
-  padding: 0 34px;
-  border-bottom: 1px solid #e9eef5;
-  background: rgb(255 255 255 / 92%);
-  backdrop-filter: blur(18px);
-}
-
-.page-caption {
-  margin-bottom: 5px;
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.page-title {
-  color: #1e293b;
-  font-size: 17px;
-  font-weight: 650;
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
-
-.avatar {
-  color: white;
-  font-size: 13px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
-}
-
 .main-content {
-  min-height: calc(100vh - 86px);
+  min-height: 100vh;
   padding: 30px 34px 44px;
 }
 
@@ -266,8 +217,7 @@
   }
 
   .sidebar-footer,
-  .brand-description,
-  .page-caption {
+  .brand-description {
     display: none;
   }
 
