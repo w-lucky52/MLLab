@@ -5,34 +5,9 @@ import {
   DataAnalysis,
   FolderOpened,
   MagicStick,
-  TrendCharts,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
-
-const statistics = [
-  {
-    label: '内置数据集',
-    value: '3',
-    description: '支持上传 CSV',
-    icon: FolderOpened,
-    color: 'blue',
-  },
-  {
-    label: '可选算法',
-    value: '5',
-    description: '覆盖分类与集成模型',
-    icon: MagicStick,
-    color: 'purple',
-  },
-  {
-    label: '评估指标',
-    value: '4',
-    description: '准确率、精确率等',
-    icon: TrendCharts,
-    color: 'green',
-  },
-]
 
 const features = [
   {
@@ -104,20 +79,6 @@ const features = [
           <strong>已准备就绪</strong>
         </div>
       </div>
-    </section>
-
-    <section class="statistics-grid">
-      <el-card v-for="item in statistics" :key="item.label" class="statistic-card" shadow="never">
-        <div :class="['statistic-icon', item.color]">
-          <el-icon><component :is="item.icon" /></el-icon>
-        </div>
-
-        <div class="statistic-information">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-          <small>{{ item.description }}</small>
-        </div>
-      </el-card>
     </section>
 
     <section class="content-section">
@@ -345,70 +306,10 @@ const features = [
   background: rgb(129 140 248 / 20%);
 }
 
-.statistics-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-top: 22px;
-}
-
-.statistic-card :deep(.el-card__body) {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 22px;
-}
-
-.statistic-icon,
 .feature-icon {
   display: grid;
   flex: none;
   place-items: center;
-}
-
-.statistic-icon {
-  width: 52px;
-  height: 52px;
-  font-size: 23px;
-  border-radius: 15px;
-}
-
-.statistic-icon.blue {
-  color: #2563eb;
-  background: #eff6ff;
-}
-
-.statistic-icon.purple {
-  color: #7c3aed;
-  background: #f5f3ff;
-}
-
-.statistic-icon.green {
-  color: #059669;
-  background: #ecfdf5;
-}
-
-.statistic-information {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  flex: 1;
-  align-items: center;
-}
-
-.statistic-information span {
-  color: #64748b;
-  font-size: 13px;
-}
-
-.statistic-information strong {
-  grid-row: span 2;
-  color: #0f172a;
-  font-size: 30px;
-}
-
-.statistic-information small {
-  margin-top: 5px;
-  color: #94a3b8;
 }
 
 .content-section {
@@ -525,7 +426,6 @@ const features = [
     display: none;
   }
 
-  .statistics-grid,
   .feature-grid {
     grid-template-columns: 1fr;
   }

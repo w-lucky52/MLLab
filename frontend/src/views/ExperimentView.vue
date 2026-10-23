@@ -457,12 +457,18 @@ onMounted(fetchModels)
   color: white;
   border-radius: 20px;
   background:
-    radial-gradient(circle at 80% 10%, rgb(167 139 250 / 28%), transparent 30%),
-    linear-gradient(120deg, #312e81, #4f46e5);
-  box-shadow: 0 20px 45px rgb(79 70 229 / 15%);
+    radial-gradient(circle at 80% 10%, rgb(96 165 250 / 25%), transparent 30%),
+    linear-gradient(120deg, #172554, #1e40af);
+  box-shadow: 0 20px 45px rgb(30 64 175 / 14%);
 }
 
-.eyebrow,
+.eyebrow {
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.7px;
+}
+
 .section-title span {
   color: #c4b5fd;
   font-size: 11px;
@@ -477,7 +483,7 @@ onMounted(fetchModels)
 
 .page-heading p {
   margin: 0;
-  color: #ddd6fe;
+  color: #cbd5e1;
 }
 
 .heading-icon {
