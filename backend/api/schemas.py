@@ -114,10 +114,13 @@ class TrainingInfo(BaseModel):
     """Training metadata returned by iterative models.
 
     All fields are optional because not every model exposes them. The
-    frontend should render only the fields that are present.
+    frontend should render only the fields that are present. Records written
+    before these fields existed simply leave them as ``None``.
     """
 
     loss_history: list[float] | None = None
+    loss_name: str | None = None
+    loss_source: str | None = None
     n_iter: int | None = None
     stop_reason: str | None = None
     coefficients: list[list[float]] | list[float] | None = None
@@ -126,6 +129,10 @@ class TrainingInfo(BaseModel):
     n_features_in: int | None = None
     feature_names: list[str] | None = None
     fit_duration_ms: float | None = None
+    resolved_parameters: dict[str, Any] | None = None
+    standardize: bool | None = None
+    train_sample_count: int | None = None
+    test_sample_count: int | None = None
 
 
 # --- charts ------------------------------------------------------------------

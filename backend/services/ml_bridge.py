@@ -188,17 +188,138 @@ def create_estimator(
     return base.get_model(name).create_estimator(hyperparameters, random_state)
 
 
+def _to_jsonable(value: Any) -> Any:
+    """Strictly convert ``value`` into JSON-native Python types.
+
+    Only values that can be reproduced faithfully are accepted:
+
+    - ``None``, ``bool``, ``int`` and ``str`` are returned unchanged;
+    - ``float`` must be finite (``NaN`` / ``Inf`` raise ``ValueError``);
+    - NumPy scalars are unwrapped with ``item()`` and converted recursively;
+    - NumPy arrays are converted with ``tolist()`` and converted recursively;
+    - ``list`` / ``tuple`` are converted item-wise into a new ``list``;
+    - ``dict`` keys and values are converted recursively, and keys must be
+      simple JSON-supported types (``str`` / ``int`` / ``float`` / ``bool`` /
+      ``None``);
+    - everything else (``set``, custom objects, ...) raises ``TypeError``.
+
+    Values are never stringified implicitly: an unserializable value must fail
+    loudly instead of being reported as a fake, non-reproducible parameter.
+    """
+    import math
+
+    import numpy as np
+
+    if value is None:
+        return None
+    if isinstance(value, np.generic):
+        return _to_jsonable(value.item())
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"Non-finite float {value!r} is not JSON-serializable.")
+        return value
+    if isinstance(value, str):
+        return value
+    if isinstance(value, np.ndarray):
+        return _to_jsonable(value.tolist())
+    if isinstance(value, (list, tuple)):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        converted: dict[Any, Any] = {}
+        for key, item in value.items():
+            converted_key = _to_jsonable(key)
+            if converted_key is not None and not isinstance(
+                converted_key, (str, int, float, bool)
+            ):
+                raise TypeError(
+                    f"Dictionary key of type {type(key).__name__} "
+                    "is not JSON-serializable."
+                )
+            converted[converted_key] = _to_jsonable(item)
+        return converted
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON-serializable.")
+
+
+def get_effective_parameters(estimator: Any) -> dict[str, Any] | None:
+    """Return the constructor arguments the estimator actually holds.
+
+    Reads ``type(estimator).__init__`` with :func:`inspect.signature`, skips
+    ``self`` / ``*args`` / ``**kwargs`` and any name ending with an underscore
+    (fitted attributes such as ``coef_``), then copies the same-named instance
+    attributes. Values are converted to JSON-friendly Python types.
+
+    The estimator is only read, never modified, and no sklearn ``get_params``
+    is used. Returns ``None`` when no constructor argument can be recovered
+    (e.g. objects whose ``__init__`` is ``object.__init__``).
+
+    Conversion is strict (see :func:`_to_jsonable`): a constructor argument
+    that cannot be reproduced as JSON (a non-finite float, a set, a custom
+    object, ...) is never skipped or stringified. Instead the error is raised
+    again with the parameter name and its actual type, e.g.
+    ``Cannot serialize effective parameter 'callback' of type SomeCallback.``
+    """
+    import inspect
+
+    try:
+        signature = inspect.signature(type(estimator).__init__)
+    except (TypeError, ValueError):
+        return None
+
+    resolved: dict[str, Any] = {}
+    for name, parameter in signature.parameters.items():
+        if name == "self" or parameter.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
+        if name.endswith("_") or not hasattr(estimator, name):
+            continue
+        value = getattr(estimator, name)
+        try:
+            resolved[name] = _to_jsonable(value)
+        except (TypeError, ValueError) as exc:
+            message = (
+                f"Cannot serialize effective parameter {name!r} of type "
+                f"{type(value).__name__}."
+            )
+            if isinstance(exc, ValueError):
+                raise ValueError(message) from exc
+            raise TypeError(message) from exc
+    return resolved or None
+
+
+def _finite_curve(value: Any) -> list[float] | None:
+    """Return a finite 1-D curve as floats, or ``None`` when unusable."""
+    import numpy as np
+
+    if value is None:
+        return None
+    try:
+        array = np.asarray(value, dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if array.ndim != 1 or array.size == 0 or not np.all(np.isfinite(array)):
+        return None
+    return [float(item) for item in array]
+
+
 def get_training_info(
     estimator: Any,
     feature_names: list[str] | None = None,
     fit_duration_ms: float | None = None,
+    standardize: bool | None = None,
+    train_sample_count: int | None = None,
+    test_sample_count: int | None = None,
 ) -> dict[str, Any]:
     """Extract training metadata from a fitted estimator.
 
     Reads sklearn-style fitted attributes (trailing underscore) and maps
     them to JSON-friendly keys without the underscore:
 
-    ``loss_history_`` -> ``loss_history``
     ``n_iter_``       -> ``n_iter``
     ``stop_reason_``  -> ``stop_reason``
     ``coef_``         -> ``coefficients``
@@ -206,8 +327,22 @@ def get_training_info(
     ``feature_importances_`` -> ``feature_importances``
     ``n_features_in_`` -> ``n_features_in``
 
-    ``feature_names`` (when supplied) and ``fit_duration_ms`` are also
-    recorded. Fields are omitted when the estimator does not expose them.
+    Loss curves are only recorded when a real, finite 1-D curve exists:
+
+    - ``loss_history_`` -> ``loss_history`` + ``loss_name="objective"``
+      + ``loss_source="loss_history_"``
+    - otherwise ``train_score_`` (GBDT) -> ``loss_history``
+      + ``loss_name="training_loss"`` + ``loss_source="train_score_"``
+
+    Models without a curve get no ``loss_history`` / ``loss_name`` /
+    ``loss_source`` keys; nothing is ever fabricated. An invalid or
+    non-finite curve is dropped entirely.
+
+    ``feature_names``, ``fit_duration_ms``, ``standardize``,
+    ``train_sample_count`` and ``test_sample_count`` are recorded when
+    supplied. ``resolved_parameters`` always reflects the constructor
+    arguments actually held by the estimator (see
+    :func:`get_effective_parameters`). Fields are omitted when unknown.
 
     Layer-list weights (``coefs_`` / ``intercepts_`` as exposed by
     ``MLPClassifier``) are intentionally NOT mapped: per-layer shapes would
@@ -219,7 +354,6 @@ def get_training_info(
 
     info: dict[str, Any] = {}
     attr_map = {
-        "loss_history_": "loss_history",
         "n_iter_": "n_iter",
         "stop_reason_": "stop_reason",
         "n_features_in_": "n_features_in",
@@ -227,6 +361,20 @@ def get_training_info(
     for src, dst in attr_map.items():
         if hasattr(estimator, src):
             info[dst] = getattr(estimator, src)
+
+    if hasattr(estimator, "loss_history_"):
+        curve = _finite_curve(estimator.loss_history_)
+        if curve is not None:
+            info["loss_history"] = curve
+            info["loss_name"] = "objective"
+            info["loss_source"] = "loss_history_"
+    elif hasattr(estimator, "train_score_"):
+        curve = _finite_curve(estimator.train_score_)
+        if curve is not None:
+            info["loss_history"] = curve
+            info["loss_name"] = "training_loss"
+            info["loss_source"] = "train_score_"
+
     if hasattr(estimator, "coef_"):
         info["coefficients"] = np.asarray(estimator.coef_).tolist()
     if hasattr(estimator, "intercept_"):
@@ -239,6 +387,13 @@ def get_training_info(
         info["feature_names"] = list(feature_names)
     if fit_duration_ms is not None:
         info["fit_duration_ms"] = float(fit_duration_ms)
+    if standardize is not None:
+        info["standardize"] = bool(standardize)
+    if train_sample_count is not None:
+        info["train_sample_count"] = int(train_sample_count)
+    if test_sample_count is not None:
+        info["test_sample_count"] = int(test_sample_count)
+    info["resolved_parameters"] = get_effective_parameters(estimator)
     return info
 
 

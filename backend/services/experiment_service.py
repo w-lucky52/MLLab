@@ -110,13 +110,16 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
             f"but dataset {experiment.dataset_name!r} is {task_type!r}."
         )
 
+    # Standardization is not user-configurable yet; record the value actually
+    # passed so training_info reflects the real preprocessing configuration.
+    standardize = True
     X_train, X_test, y_train, y_test = ml_bridge.split_dataset(
         data.X,
         data.y,
         test_size=experiment.test_size,
         random_state=experiment.random_state,
         task_type=task_type,
-        standardize=True,
+        standardize=standardize,
     )
 
     estimator = ml_bridge.create_estimator(
@@ -135,6 +138,9 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
             estimator,
             feature_names=feature_names,
             fit_duration_ms=fit_duration_ms,
+            standardize=standardize,
+            train_sample_count=len(X_train),
+            test_sample_count=len(X_test),
         )
     )
 
@@ -187,7 +193,14 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
     except Exception:  # charts are optional; keep the metrics result
         charts = []
 
-    _write_summary(artifact_dir, experiment, task_type, metrics, [c["file"] for c in charts])
+    _write_summary(
+        artifact_dir,
+        experiment,
+        task_type,
+        metrics,
+        [c["file"] for c in charts],
+        training_info,
+    )
     return {
         "metrics": metrics,
         "confusion_matrix": confusion_matrix,
@@ -207,6 +220,7 @@ def _write_summary(
     task_type: str,
     metrics: dict[str, Any],
     chart_files: list[str],
+    training_info: dict[str, Any],
 ) -> None:
     summary = {
         "experiment_id": experiment.id,
@@ -218,6 +232,7 @@ def _write_summary(
         "test_size": experiment.test_size,
         "random_state": experiment.random_state,
         "metrics": metrics,
+        "training_info": training_info,
         "charts": chart_files,
         "finished_at": datetime.now(timezone.utc).isoformat(),
     }
