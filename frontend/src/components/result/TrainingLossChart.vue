@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
-import { curveSummary, formatNumber, normalizeCurve } from '@/utils/training'
+import { formatNumber, normalizeCurve } from '@/utils/training'
 
 const props = defineProps({
   lossHistory: { type: Array, default: null },
@@ -13,7 +13,6 @@ const chartEl = ref(null)
 
 const curve = computed(() => normalizeCurve(props.lossHistory))
 const hasData = computed(() => Boolean(curve.value))
-const stats = computed(() => curveSummary(curve.value))
 
 const axisName = computed(() => {
   if (props.lossName === 'objective') return '目标函数值'
@@ -29,18 +28,6 @@ const subtitle = computed(() => {
     return '逐轮目标函数值（loss_history_）'
   }
   return '逐轮损失记录'
-})
-
-const statItems = computed(() => {
-  const summary = stats.value
-  if (!summary) return []
-
-  return [
-    { label: '初始值', value: formatNumber(summary.initial) },
-    { label: '最终值', value: formatNumber(summary.final) },
-    { label: '最小值', value: formatNumber(summary.minimum) },
-    { label: '记录点数', value: String(summary.count) },
-  ]
 })
 
 const buildOption = () => {
@@ -128,16 +115,7 @@ watch(() => props.lossHistory, () => {
       <el-empty :image-size="64" description="该实验未记录可用的训练曲线。" />
     </div>
 
-    <template v-else>
-      <div class="loss-stats">
-        <div v-for="item in statItems" :key="item.label" class="loss-stat">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </div>
-      </div>
-
-      <div ref="chartEl" class="chart"></div>
-    </template>
+    <div v-else ref="chartEl" class="chart"></div>
   </el-card>
 </template>
 
@@ -169,34 +147,6 @@ watch(() => props.lossHistory, () => {
   font-size: 11px;
 }
 
-.loss-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px 6px 0;
-}
-
-.loss-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #f8fafc;
-}
-
-.loss-stat span {
-  color: #94a3b8;
-  font-size: 11px;
-}
-
-.loss-stat strong {
-  color: #0f172a;
-  font-size: 15px;
-  font-weight: 700;
-  word-break: break-all;
-}
-
 .chart {
   width: 100%;
   height: 360px;
@@ -206,11 +156,5 @@ watch(() => props.lossHistory, () => {
   display: grid;
   min-height: 340px;
   place-items: center;
-}
-
-@media (max-width: 700px) {
-  .loss-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 </style>

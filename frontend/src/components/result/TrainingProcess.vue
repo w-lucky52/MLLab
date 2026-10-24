@@ -2,13 +2,18 @@
 import { computed } from 'vue'
 import { TrendCharts } from '@element-plus/icons-vue'
 
+import AlgorithmTrainingFlow from './AlgorithmTrainingFlow.vue'
 import EffectiveParametersTable from './EffectiveParametersTable.vue'
+import TrainingCurveSummary from './TrainingCurveSummary.vue'
 import TrainingLossChart from './TrainingLossChart.vue'
+import TrainingSplitChart from './TrainingSplitChart.vue'
 import {
+  MISSING_CURVE_HINT,
   formatDuration,
   formatSampleSplit,
+  getNoCurveExplanation,
+  isIterativeModel,
   iterationSummary,
-  lossEmptyDescription,
   normalizeCurve,
   standardizeSummary,
   stopReasonText,
@@ -30,7 +35,9 @@ const resolvedParameters = computed(() => {
 })
 
 const curve = computed(() => normalizeCurve(info.value.loss_history))
-const emptyDescription = computed(() => lossEmptyDescription(props.modelName))
+const hasCurve = computed(() => Boolean(curve.value))
+const iterative = computed(() => isIterativeModel(props.modelName))
+const noCurveStatements = computed(() => getNoCurveExplanation(props.modelName))
 
 const summaryCards = computed(() => {
   const standardize = standardizeSummary(info.value.standardize)
@@ -82,25 +89,95 @@ const insights = computed(() =>
       </el-card>
     </section>
 
-    <TrainingLossChart
-      v-if="curve"
-      :loss-history="info.loss_history"
-      :loss-name="info.loss_name"
-      :active="active"
-    />
+    <template v-if="hasCurve">
+      <div class="training-row">
+        <TrainingLossChart
+          :loss-history="info.loss_history"
+          :loss-name="info.loss_name"
+          :active="active"
+        />
 
-    <el-card v-else class="empty-card" shadow="never">
-      <div class="empty-body">
-        <el-empty :image-size="64" :description="emptyDescription" />
+        <TrainingSplitChart
+          :train-count="info.train_sample_count"
+          :test-count="info.test_sample_count"
+          :active="active"
+        />
       </div>
-    </el-card>
 
-    <EffectiveParametersTable
-      :resolved-parameters="resolvedParameters"
-      :hyperparameters="hyperparameters"
-    />
+      <div class="training-row">
+        <EffectiveParametersTable
+          :resolved-parameters="resolvedParameters"
+          :hyperparameters="hyperparameters"
+        />
 
-    <section class="insight-card">
+        <TrainingCurveSummary :loss-history="info.loss_history" :loss-name="info.loss_name" />
+      </div>
+
+      <AlgorithmTrainingFlow :model-name="modelName" :parameters="resolvedParameters" />
+    </template>
+
+    <template v-else-if="iterative">
+      <div class="training-row">
+        <el-card class="hint-card" shadow="never">
+          <div class="hint-body">
+            <el-empty :image-size="56" :description="MISSING_CURVE_HINT" />
+          </div>
+        </el-card>
+
+        <TrainingSplitChart
+          :train-count="info.train_sample_count"
+          :test-count="info.test_sample_count"
+          :active="active"
+        />
+      </div>
+
+      <div class="training-row">
+        <EffectiveParametersTable
+          :resolved-parameters="resolvedParameters"
+          :hyperparameters="hyperparameters"
+        />
+
+        <TrainingCurveSummary :loss-history="null" :loss-name="info.loss_name" />
+      </div>
+
+      <AlgorithmTrainingFlow :model-name="modelName" :parameters="resolvedParameters" />
+    </template>
+
+    <template v-else>
+      <div class="training-row">
+        <AlgorithmTrainingFlow :model-name="modelName" :parameters="resolvedParameters" />
+
+        <TrainingSplitChart
+          :train-count="info.train_sample_count"
+          :test-count="info.test_sample_count"
+          :active="active"
+        />
+      </div>
+
+      <div class="training-row">
+        <EffectiveParametersTable
+          :resolved-parameters="resolvedParameters"
+          :hyperparameters="hyperparameters"
+        />
+
+        <el-card class="note-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <div>
+                <h3>为什么没有损失曲线</h3>
+                <p>该模型的训练机制与逐轮优化无关</p>
+              </div>
+            </div>
+          </template>
+
+          <ul class="note-list">
+            <li v-for="statement in noCurveStatements" :key="statement">{{ statement }}</li>
+          </ul>
+        </el-card>
+      </div>
+    </template>
+
+    <section v-if="iterative" class="insight-card">
       <div class="insight-icon">
         <el-icon><TrendCharts /></el-icon>
       </div>
@@ -156,25 +233,75 @@ const insights = computed(() =>
   line-height: 1.6;
 }
 
-.empty-card :deep(.el-card__body) {
+.training-row {
+  display: grid;
+  align-items: start;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.training-row > * {
+  min-width: 0;
+}
+
+.hint-card :deep(.el-card__body) {
   padding: 10px 16px;
 }
 
-.empty-body {
+.hint-body {
   display: grid;
-  min-height: 260px;
+  min-height: 132px;
   place-items: center;
-  padding: 0 8px;
 }
 
-.empty-body :deep(.el-empty__description) {
-  max-width: 460px;
+.note-card :deep(.el-card__header) {
+  padding: 20px 22px;
 }
 
-.empty-body :deep(.el-empty__description p) {
-  color: #64748b;
+.note-card :deep(.el-card__body) {
+  padding: 12px 22px 18px;
+}
+
+.card-header h3 {
+  margin: 0 0 6px;
+  color: #1e293b;
+  font-size: 15px;
+}
+
+.card-header p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.note-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.note-list li {
+  position: relative;
+  padding-left: 16px;
+  margin-bottom: 8px;
+  color: #475569;
   font-size: 12px;
-  line-height: 1.8;
+  line-height: 1.7;
+}
+
+.note-list li:last-child {
+  margin-bottom: 0;
+}
+
+.note-list li::before {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  content: '';
+  border-radius: 50%;
+  background: #3b82f6;
 }
 
 .insight-card {
@@ -235,6 +362,12 @@ const insights = computed(() =>
   content: '';
   border-radius: 50%;
   background: #3b82f6;
+}
+
+@media (max-width: 1100px) {
+  .training-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 1000px) {

@@ -146,6 +146,112 @@ export function curveSummary(curve) {
   }
 }
 
+/** Hint shown when an iterative model's history record has no stored curve. */
+export const MISSING_CURVE_HINT = '该历史实验未保存训练曲线，无法展示逐轮变化。'
+
+/**
+ * Validate the stored train/test sample counts and derive percentages.
+ *
+ * Only the recorded counts are used — never the configured ``test_size`` —
+ * so historical experiments stay accurate. Anything missing, non-integer,
+ * negative, or summing to zero is unusable.
+ */
+export function normalizeTrainingSplit(trainCount, testCount) {
+  const train = toFiniteNumber(trainCount)
+  const test = toFiniteNumber(testCount)
+
+  if (train === null || test === null) {
+    return { available: false, reason: '本次实验未记录训练集与测试集样本数。' }
+  }
+  if (!Number.isInteger(train) || !Number.isInteger(test)) {
+    return { available: false, reason: '记录的样本数不是整数。' }
+  }
+  if (train < 0 || test < 0) {
+    return { available: false, reason: '记录的样本数为负数。' }
+  }
+  if (train + test === 0) {
+    return { available: false, reason: '记录的样本总数为 0。' }
+  }
+
+  const total = train + test
+  return {
+    available: true,
+    trainCount: train,
+    testCount: test,
+    total,
+    trainPercent: (train / total) * 100,
+    testPercent: (test / total) * 100,
+  }
+}
+
+/**
+ * Summarize a stored loss curve.
+ *
+ * Accepts only a non-empty one-dimensional array of finite numbers; the
+ * input array is never modified. Rounds are 1-based, and a repeated minimum
+ * resolves to its first occurrence. ``relativeChangePercent`` is ``null``
+ * when the initial value is 0 (division by zero is never attempted).
+ */
+export function summarizeTrainingCurve(lossHistory) {
+  if (!Array.isArray(lossHistory) || lossHistory.length === 0) {
+    return { available: false, reason: '该实验未保存训练曲线。' }
+  }
+  if (!lossHistory.every((value) => typeof value === 'number' && Number.isFinite(value))) {
+    return { available: false, reason: '训练曲线包含非有限数值。' }
+  }
+
+  const curve = [...lossHistory]
+  const count = curve.length
+  const initial = curve[0]
+  const final = curve[count - 1]
+
+  let minimum = curve[0]
+  let minRound = 1
+  for (let index = 1; index < count; index += 1) {
+    if (curve[index] < minimum) {
+      minimum = curve[index]
+      minRound = index + 1
+    }
+  }
+
+  const absoluteChange = final - initial
+
+  return {
+    available: true,
+    count,
+    initial,
+    final,
+    minimum,
+    minRound,
+    absoluteChange,
+    relativeChangePercent:
+      initial === 0 ? null : (absoluteChange / Math.abs(initial)) * 100,
+    finalVsMinimum: final - minimum,
+  }
+}
+
+/** Objective statements about a curve summary; never quality judgements. */
+export function curveStatements(summary) {
+  if (!summary?.available) return []
+
+  const statements = []
+  if (summary.absoluteChange < 0) {
+    statements.push(`最终值低于初始值，绝对变化量为 ${formatNumber(summary.absoluteChange)}。`)
+  } else if (summary.absoluteChange > 0) {
+    statements.push(`最终值高于初始值，绝对变化量为 ${formatNumber(summary.absoluteChange)}。`)
+  } else {
+    statements.push('最终值等于初始值。')
+  }
+
+  statements.push(`最低记录出现在第 ${summary.minRound} 轮。`)
+
+  if (summary.relativeChangePercent === null) {
+    statements.push('初始值为 0，相对变化不适用。')
+  }
+
+  return statements
+}
+
 export function formatParameterValue(value) {
   if (value === null || value === undefined) return '空'
   if (typeof value === 'boolean') return value ? '是' : '否'
@@ -234,6 +340,162 @@ export function lossEmptyDescription(modelName) {
   if (note) return note
   if (isIterativeModel(modelName)) return LOSS_EMPTY_FALLBACK
   return '该模型未提供逐轮损失曲线。'
+}
+
+const parameterValueOrUnrecorded = (parameters, name) => {
+  const value = parameters?.[name]
+  return value === null || value === undefined ? UNRECORDED : formatParameterValue(value)
+}
+
+const MECHANISM_NOTE = '该流程为算法机制说明，不代表后端额外记录了中间状态。'
+
+const ALGORITHM_FLOWS = {
+  knn_classifier: {
+    steps: [
+      '保存训练样本',
+      '计算待预测样本与训练样本的距离',
+      '选择最近的 K 个邻居',
+      '按 weights 规则投票',
+      '输出类别',
+    ],
+    notes: (parameters) => [
+      'KNN 没有基于梯度的参数优化过程，训练阶段主要保存训练数据，因此没有逐轮损失曲线。',
+      `本次记录：n_neighbors = ${parameterValueOrUnrecorded(parameters, 'n_neighbors')}，weights = ${parameterValueOrUnrecorded(parameters, 'weights')}，p = ${parameterValueOrUnrecorded(parameters, 'p')}。`,
+    ],
+  },
+  gaussian_nb: {
+    steps: [
+      '按类别划分训练样本',
+      '估计每个类别的特征均值与方差',
+      '估计类别先验',
+      '计算后验相关分数',
+      '输出概率最大的类别',
+    ],
+    notes: (parameters) => [
+      'GaussianNB 通过统计估计完成训练，不执行梯度迭代，因此没有逐轮损失曲线。',
+      `本次记录：var_smoothing = ${parameterValueOrUnrecorded(parameters, 'var_smoothing')}。`,
+    ],
+  },
+  decision_tree_regressor: {
+    steps: [
+      '搜索候选特征与划分阈值',
+      '选择使节点误差下降的划分',
+      '递归生成子节点',
+      '满足停止条件后生成叶节点',
+      '叶节点输出预测值',
+    ],
+    notes: () => [
+      '决策树通过递归划分构建树结构，属于结构搜索过程，不提供统一的逐轮损失曲线。',
+      '树深度与节点数量是结构属性，不代表迭代轮数。',
+    ],
+  },
+  random_forest_regressor: {
+    steps: [
+      '生成多组训练子样本',
+      '为每组样本训练一棵决策树',
+      '各棵树独立产生预测',
+      '聚合多棵树的预测结果',
+      '输出平均预测值',
+    ],
+    notes: (parameters) => [
+      '随机森林由多棵决策树组成，当前接口没有记录每棵树的逐步训练损失，因此不展示统一损失曲线。',
+      `本次记录：n_estimators = ${parameterValueOrUnrecorded(parameters, 'n_estimators')}，表示树的数量，不是优化迭代次数。`,
+    ],
+  },
+  linear_regression: {
+    steps: ['初始化参数', '计算预测与残差', '计算均方目标梯度', '更新参数', '检查停止条件'],
+    notes: () => [MECHANISM_NOTE],
+  },
+  ridge_regression: {
+    steps: ['初始化参数', '计算预测与残差', '加入 L2 正则项', '更新参数', '检查停止条件'],
+    notes: () => [MECHANISM_NOTE],
+  },
+  logistic_regression: {
+    steps: ['初始化类别权重', '计算 Softmax 概率', '计算交叉熵与梯度', '更新参数', '检查停止条件'],
+    notes: () => [MECHANISM_NOTE],
+  },
+  linear_svm: {
+    steps: [
+      '构造 One-vs-Rest 目标',
+      '计算分类间隔',
+      '计算 hinge 次梯度',
+      '更新参数',
+      '检查停止条件',
+    ],
+    notes: () => [MECHANISM_NOTE],
+  },
+  mlp_classifier: {
+    steps: ['初始化网络参数', '前向传播', '计算交叉熵', '反向传播', '更新两层网络参数'],
+    notes: () => [MECHANISM_NOTE],
+  },
+  gbdt_regressor: {
+    steps: [
+      '生成初始预测',
+      '计算当前残差',
+      '拟合新的弱学习器',
+      '更新集成预测',
+      '进入下一轮提升',
+    ],
+    notes: () => [
+      '逐轮训练分数来自 train_score_，是训练集损失，不代表测试集误差。',
+      MECHANISM_NOTE,
+    ],
+  },
+}
+
+const GENERIC_FLOW = {
+  steps: ['加载训练数据与参数', '完成模型训练', '生成预测结果'],
+  notes: () => ['该模型的详细训练机制暂未提供逐步说明。'],
+}
+
+/**
+ * Objective per-algorithm training mechanism. Pure description only: no
+ * simulated loss data, no iteration counts invented for non-iterative
+ * models, and unknown models fall back to a generic flow.
+ */
+export function getAlgorithmTrainingFlow(modelName, parameters) {
+  const definition = ALGORITHM_FLOWS[modelName] || GENERIC_FLOW
+  const safeParameters =
+    parameters && typeof parameters === 'object' && !Array.isArray(parameters)
+      ? parameters
+      : null
+
+  return {
+    available: true,
+    title: '算法训练流程',
+    steps: [...definition.steps],
+    notes: definition.notes(safeParameters),
+  }
+}
+
+const NO_CURVE_EXPLANATIONS = {
+  knn_classifier: [
+    'KNN 没有基于梯度的参数优化过程。',
+    '训练阶段主要保存训练数据，预测时才计算距离并完成投票。',
+    '因此该模型没有逐轮损失曲线。',
+  ],
+  gaussian_nb: [
+    'GaussianNB 通过统计估计完成训练，不执行梯度迭代。',
+    '训练阶段估计类别先验与每个类别的特征分布参数。',
+    '因此该模型没有逐轮损失曲线。',
+  ],
+  decision_tree_regressor: [
+    '决策树通过递归划分构建树结构，属于结构搜索过程。',
+    '训练过程中不存在统一的迭代优化目标记录。',
+    '因此该模型没有逐轮损失曲线。',
+  ],
+  random_forest_regressor: [
+    '随机森林由多棵决策树组成，各棵树独立训练。',
+    '当前接口没有记录每棵树的逐步训练损失。',
+    '因此不展示统一损失曲线，n_estimators 表示树的数量而非迭代次数。',
+  ],
+}
+
+/** Why a model has no loss curve; unknown models get a safe fallback. */
+export function getNoCurveExplanation(modelName) {
+  const statements = NO_CURVE_EXPLANATIONS[modelName]
+  if (statements) return [...statements]
+  return ['该模型未提供逐轮损失曲线。']
 }
 
 /** Objective training-process statements, never model-quality judgements. */
