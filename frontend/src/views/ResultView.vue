@@ -275,9 +275,22 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <el-empty v-if="!hasResult" class="empty-result" description="暂无可展示的实验结果">
+    <el-empty
+      v-if="!hasResult && experiment?.status !== 'failed'"
+      class="empty-result"
+      description="暂无可展示的实验结果"
+    >
       <el-button type="primary" @click="router.push('/data')"> 开始新实验 </el-button>
     </el-empty>
+
+    <el-card v-else-if="experiment?.status === 'failed'" class="failed-card" shadow="never">
+      <el-result icon="error" title="实验运行失败" :sub-title="experiment.error || '未知错误'">
+        <template #extra>
+          <el-button type="primary" @click="router.push('/experiment')">重新配置实验</el-button>
+          <el-button @click="router.push('/history')">返回历史记录</el-button>
+        </template>
+      </el-result>
+    </el-card>
 
     <template v-else>
       <section class="experiment-summary">
@@ -455,6 +468,11 @@ onBeforeUnmount(() => {
 
 .empty-result {
   min-height: 430px;
+}
+
+.failed-card {
+  margin-top: 20px;
+  border-radius: 17px;
 }
 
 .experiment-summary {
