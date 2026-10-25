@@ -1,5 +1,5 @@
 <script setup>
-
+import { Clock, FolderOpened, House, Setting } from '@element-plus/icons-vue'
 </script>
 
 <template>

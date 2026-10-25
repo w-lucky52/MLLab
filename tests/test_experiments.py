@@ -116,7 +116,9 @@ def test_experiment_completes_with_fake_ml_engine(client, monkeypatch):
     assert detail["metrics"] == {"accuracy": 1.0}
     assert detail["confusion_matrix"] == [[1, 0], [0, 1]]
     assert detail["class_labels"] == ["class_0", "class_1"]
-    assert detail["training_info"] == {}
+    assert detail["training_info"]["feature_names"] == ["f0", "f1"]
+    assert isinstance(detail["training_info"]["fit_duration_ms"], float)
+    assert detail["training_info"]["fit_duration_ms"] >= 0
     assert detail["charts"] == []
 
 
@@ -137,8 +139,11 @@ def test_completed_classification_exposure_evaluation_block(client, monkeypatch)
     assert evaluation["metrics"] == {"accuracy": 1.0}
     assert evaluation["confusion_matrix"] == [[1, 0], [0, 1]]
     assert evaluation["class_labels"] == ["class_0", "class_1"]
-    assert evaluation["y_true"] is None
-    assert evaluation["y_pred"] is None
+    # Classification now exposes y_true / y_pred / score info + per-class metrics
+    assert evaluation["y_true"] is not None
+    assert evaluation["y_pred"] is not None
+    assert "score_type" in evaluation
+    assert "per_class_metrics" in evaluation
     # Raw predictions are internal only; never serialized at top level.
     assert "predictions" not in detail
 

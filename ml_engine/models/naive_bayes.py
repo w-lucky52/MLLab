@@ -32,3 +32,23 @@ class GaussianNBModel(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         return self._model.predict(X)
+
+    def predict_proba(self, X):
+        """Return class probabilities; columns follow ``classes_`` order."""
+        if self._model is None:
+            raise ValueError("GaussianNBModel is not fitted. Call fit() first.")
+        return self._model.predict_proba(X)
+
+    @property
+    def theta_(self):
+        """Per-class mean, shape (n_classes, n_features)."""
+        if self._model is None:
+            raise ValueError("GaussianNBModel is not fitted. Call fit() first.")
+        return self._model.theta_
+
+    @property
+    def var_(self):
+        """Per-class variance, shape (n_classes, n_features)."""
+        if self._model is None:
+            raise ValueError("GaussianNBModel is not fitted. Call fit() first.")
+        return self._model.var_

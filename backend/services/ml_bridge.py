@@ -188,13 +188,224 @@ def create_estimator(
     return base.get_model(name).create_estimator(hyperparameters, random_state)
 
 
-def get_training_info(estimator: Any) -> dict[str, Any]:
+def _to_jsonable(value: Any) -> Any:
+    """Strictly convert ``value`` into JSON-native Python types.
+
+    Only values that can be reproduced faithfully are accepted:
+
+    - ``None``, ``bool``, ``int`` and ``str`` are returned unchanged;
+    - ``float`` must be finite (``NaN`` / ``Inf`` raise ``ValueError``);
+    - NumPy scalars are unwrapped with ``item()`` and converted recursively;
+    - NumPy arrays are converted with ``tolist()`` and converted recursively;
+    - ``list`` / ``tuple`` are converted item-wise into a new ``list``;
+    - ``dict`` keys and values are converted recursively, and keys must be
+      simple JSON-supported types (``str`` / ``int`` / ``float`` / ``bool`` /
+      ``None``);
+    - everything else (``set``, custom objects, ...) raises ``TypeError``.
+
+    Values are never stringified implicitly: an unserializable value must fail
+    loudly instead of being reported as a fake, non-reproducible parameter.
+    """
+    import math
+
+    import numpy as np
+
+    if value is None:
+        return None
+    if isinstance(value, np.generic):
+        return _to_jsonable(value.item())
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"Non-finite float {value!r} is not JSON-serializable.")
+        return value
+    if isinstance(value, str):
+        return value
+    if isinstance(value, np.ndarray):
+        return _to_jsonable(value.tolist())
+    if isinstance(value, (list, tuple)):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        converted: dict[Any, Any] = {}
+        for key, item in value.items():
+            converted_key = _to_jsonable(key)
+            if converted_key is not None and not isinstance(
+                converted_key, (str, int, float, bool)
+            ):
+                raise TypeError(
+                    f"Dictionary key of type {type(key).__name__} "
+                    "is not JSON-serializable."
+                )
+            converted[converted_key] = _to_jsonable(item)
+        return converted
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON-serializable.")
+
+
+def get_effective_parameters(estimator: Any) -> dict[str, Any] | None:
+    """Return the constructor arguments the estimator actually holds.
+
+    Reads ``type(estimator).__init__`` with :func:`inspect.signature`, skips
+    ``self`` / ``*args`` / ``**kwargs`` and any name ending with an underscore
+    (fitted attributes such as ``coef_``), then copies the same-named instance
+    attributes. Values are converted to JSON-friendly Python types.
+
+    The estimator is only read, never modified, and no sklearn ``get_params``
+    is used. Returns ``None`` when no constructor argument can be recovered
+    (e.g. objects whose ``__init__`` is ``object.__init__``).
+
+    Conversion is strict (see :func:`_to_jsonable`): a constructor argument
+    that cannot be reproduced as JSON (a non-finite float, a set, a custom
+    object, ...) is never skipped or stringified. Instead the error is raised
+    again with the parameter name and its actual type, e.g.
+    ``Cannot serialize effective parameter 'callback' of type SomeCallback.``
+    """
+    import inspect
+
+    try:
+        signature = inspect.signature(type(estimator).__init__)
+    except (TypeError, ValueError):
+        return None
+
+    resolved: dict[str, Any] = {}
+    for name, parameter in signature.parameters.items():
+        if name == "self" or parameter.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
+        if name.endswith("_") or not hasattr(estimator, name):
+            continue
+        value = getattr(estimator, name)
+        try:
+            resolved[name] = _to_jsonable(value)
+        except (TypeError, ValueError) as exc:
+            message = (
+                f"Cannot serialize effective parameter {name!r} of type "
+                f"{type(value).__name__}."
+            )
+            if isinstance(exc, ValueError):
+                raise ValueError(message) from exc
+            raise TypeError(message) from exc
+    return resolved or None
+
+
+def _finite_curve(value: Any) -> list[float] | None:
+    """Return a finite 1-D curve as floats, or ``None`` when unusable."""
+    import numpy as np
+
+    if value is None:
+        return None
+    try:
+        array = np.asarray(value, dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if array.ndim != 1 or array.size == 0 or not np.all(np.isfinite(array)):
+        return None
+    return [float(item) for item in array]
+
+
+def _jsonable_classes(estimator: Any) -> list[Any] | None:
+    """Return ``classes_`` in its original order as native JSON values.
+
+    Only integer / finite float / string labels are accepted. A missing,
+    empty, non 1-D or non-finite ``classes_`` yields ``None`` so no unreliable
+    class list is ever written. The order is never sorted or re-encoded.
+    """
+    import math
+
+    import numpy as np
+
+    if not hasattr(estimator, "classes_"):
+        return None
+    try:
+        classes = np.asarray(getattr(estimator, "classes_"), dtype=object)
+    except (TypeError, ValueError):
+        return None
+    if classes.ndim != 1 or classes.size == 0:
+        return None
+
+    converted: list[Any] = []
+    for item in classes.tolist():
+        try:
+            value = _to_jsonable(item)
+        except (TypeError, ValueError):
+            return None
+        if isinstance(value, bool):
+            converted.append(value)
+        elif isinstance(value, int):
+            converted.append(value)
+        elif isinstance(value, float):
+            if not math.isfinite(value):
+                return None
+            converted.append(value)
+        elif isinstance(value, str):
+            converted.append(value)
+        else:
+            return None
+    return converted or None
+
+
+def _class_feature_statistics(
+    estimator: Any,
+    classes: list[Any] | None,
+    feature_names: list[str] | None = None,
+    n_features_in: int | None = None,
+) -> tuple[list[list[float]], list[list[float]]] | None:
+    """Return ``(means, variances)`` from GaussianNB-style attributes.
+
+    Both ``theta_`` and ``var_`` must exist, be non-empty 2-D finite matrices
+    with identical shapes, one row per class and a consistent column count.
+    Any failed check yields ``None`` so a half-finished pair is never stored.
+    """
+    import numpy as np
+
+    if not classes:
+        return None
+
+    try:
+        theta = np.asarray(estimator.theta_, dtype=float)
+        variances = np.asarray(estimator.var_, dtype=float)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+    if theta.ndim != 2 or variances.ndim != 2:
+        return None
+    if theta.size == 0 or variances.size == 0:
+        return None
+    if theta.shape != variances.shape:
+        return None
+    if theta.shape[0] != len(classes):
+        return None
+
+    n_features = theta.shape[1]
+    if n_features <= 0:
+        return None
+    if n_features_in is not None and n_features != int(n_features_in):
+        return None
+    if feature_names is not None and n_features != len(feature_names):
+        return None
+    if not np.all(np.isfinite(theta)) or not np.all(np.isfinite(variances)):
+        return None
+
+    return theta.tolist(), variances.tolist()
+
+
+def get_training_info(
+    estimator: Any,
+    feature_names: list[str] | None = None,
+    fit_duration_ms: float | None = None,
+    standardize: bool | None = None,
+    train_sample_count: int | None = None,
+    test_sample_count: int | None = None,
+) -> dict[str, Any]:
     """Extract training metadata from a fitted estimator.
 
     Reads sklearn-style fitted attributes (trailing underscore) and maps
     them to JSON-friendly keys without the underscore:
 
-    ``loss_history_`` -> ``loss_history``
     ``n_iter_``       -> ``n_iter``
     ``stop_reason_``  -> ``stop_reason``
     ``coef_``         -> ``coefficients``
@@ -202,19 +413,42 @@ def get_training_info(estimator: Any) -> dict[str, Any]:
     ``feature_importances_`` -> ``feature_importances``
     ``n_features_in_`` -> ``n_features_in``
 
-    Fields are omitted when the estimator does not expose them.
+    Loss curves are only recorded when a real, finite 1-D curve exists:
+
+    - ``loss_history_`` -> ``loss_history`` + ``loss_name="objective"``
+      + ``loss_source="loss_history_"``
+    - otherwise ``train_score_`` (GBDT) -> ``loss_history``
+      + ``loss_name="training_loss"`` + ``loss_source="train_score_"``
+
+    Models without a curve get no ``loss_history`` / ``loss_name`` /
+    ``loss_source`` keys; nothing is ever fabricated. An invalid or
+    non-finite curve is dropped entirely.
+
+    ``feature_names``, ``fit_duration_ms``, ``standardize``,
+    ``train_sample_count`` and ``test_sample_count`` are recorded when
+    supplied. ``resolved_parameters`` always reflects the constructor
+    arguments actually held by the estimator (see
+    :func:`get_effective_parameters`). Fields are omitted when unknown.
+
+    Class labels are recorded as ``classes`` in their original ``classes_``
+    order (see :func:`_jsonable_classes`); regression models expose no
+    ``classes_`` and therefore no ``classes`` key. GaussianNB-style
+    estimators additionally store ``class_feature_means`` (``theta_``) and
+    ``class_feature_variances`` (``var_``) as a validated pair; when any
+    consistency check fails both keys are omitted (see
+    :func:`_class_feature_statistics`).
 
     Layer-list weights (``coefs_`` / ``intercepts_`` as exposed by
     ``MLPClassifier``) are intentionally NOT mapped: per-layer shapes would
     break the ``TrainingInfo.coefficients`` contract, and hidden-layer
     weights have no display value. For the MLP the training info is limited
-    to ``loss_history`` / ``n_iter`` / ``stop_reason`` / ``n_features_in``.
+    to ``loss_history`` / ``n_iter`` / ``stop_reason`` / ``n_features_in`` /
+    ``classes``.
     """
     import numpy as np
 
     info: dict[str, Any] = {}
     attr_map = {
-        "loss_history_": "loss_history",
         "n_iter_": "n_iter",
         "stop_reason_": "stop_reason",
         "n_features_in_": "n_features_in",
@@ -222,6 +456,20 @@ def get_training_info(estimator: Any) -> dict[str, Any]:
     for src, dst in attr_map.items():
         if hasattr(estimator, src):
             info[dst] = getattr(estimator, src)
+
+    if hasattr(estimator, "loss_history_"):
+        curve = _finite_curve(estimator.loss_history_)
+        if curve is not None:
+            info["loss_history"] = curve
+            info["loss_name"] = "objective"
+            info["loss_source"] = "loss_history_"
+    elif hasattr(estimator, "train_score_"):
+        curve = _finite_curve(estimator.train_score_)
+        if curve is not None:
+            info["loss_history"] = curve
+            info["loss_name"] = "training_loss"
+            info["loss_source"] = "train_score_"
+
     if hasattr(estimator, "coef_"):
         info["coefficients"] = np.asarray(estimator.coef_).tolist()
     if hasattr(estimator, "intercept_"):
@@ -230,20 +478,146 @@ def get_training_info(estimator: Any) -> dict[str, Any]:
         info["feature_importances"] = np.asarray(
             estimator.feature_importances_
         ).tolist()
+    if feature_names is not None:
+        info["feature_names"] = list(feature_names)
+    if fit_duration_ms is not None:
+        info["fit_duration_ms"] = float(fit_duration_ms)
+    if standardize is not None:
+        info["standardize"] = bool(standardize)
+    if train_sample_count is not None:
+        info["train_sample_count"] = int(train_sample_count)
+    if test_sample_count is not None:
+        info["test_sample_count"] = int(test_sample_count)
+
+    classes = _jsonable_classes(estimator)
+    if classes is not None:
+        info["classes"] = classes
+
+    statistics = _class_feature_statistics(
+        estimator,
+        classes,
+        feature_names=feature_names,
+        n_features_in=info.get("n_features_in"),
+    )
+    if statistics is not None:
+        info["class_feature_means"], info["class_feature_variances"] = statistics
+
+    info["resolved_parameters"] = get_effective_parameters(estimator)
     return info
 
 
-def get_predict_scores(estimator: Any, X: Any) -> Any | None:
-    """Return prediction scores for AUC/ROC computation, or ``None``.
+def resolve_score_class_names(
+    score_classes: Any,
+    target_names: Any,
+) -> list[str] | None:
+    """Map numeric ``score_classes`` to ``target_names`` for display only.
 
-    Prefers ``predict_proba`` (returns per-class probabilities) and falls
-    back to ``decision_function``. Returns ``None`` if neither is available.
+    Returns ``None`` unless the mapping is provable:
+
+    1. ``score_classes`` is a non-empty 1-D sequence;
+    2. ``target_names`` is a non-empty 1-D sequence of non-empty strings;
+    3. every class is an int (or a finite float equal to an integer) whose
+       value lies in ``[0, len(target_names))``.
+
+    Floating-point indices, negative classes (e.g. ``-1`` / ``1``), string
+    classes and non-contiguous classes that fall outside ``target_names`` are
+    rejected as a whole: no partial list is ever returned and nothing is
+    mapped by position alone. The original ``score_classes`` are never
+    modified; the returned list only gives display names in the same order.
     """
+    import math
+
+    import numpy as np
+
+    if score_classes is None or target_names is None:
+        return None
+
+    try:
+        classes = np.asarray(score_classes, dtype=object)
+        names = np.asarray(target_names, dtype=object)
+    except (TypeError, ValueError):
+        return None
+
+    if classes.ndim != 1 or classes.size == 0:
+        return None
+    if names.ndim != 1 or names.size == 0:
+        return None
+
+    name_list = names.tolist()
+    if not all(isinstance(name, str) and name.strip() for name in name_list):
+        return None
+
+    resolved: list[str] = []
+    for item in classes.tolist():
+        # ``bool`` is a subclass of ``int`` but is never a dataset class index.
+        if isinstance(item, bool):
+            return None
+        if isinstance(item, (int, np.integer)):
+            index = int(item)
+        elif isinstance(item, (float, np.floating)):
+            value = float(item)
+            if not math.isfinite(value) or value != int(value):
+                return None
+            index = int(value)
+        else:
+            return None
+
+        if index < 0 or index >= len(name_list):
+            return None
+        resolved.append(name_list[index])
+
+    return resolved
+
+
+def get_predict_scores(estimator: Any, X: Any) -> dict[str, Any] | None:
+    """Return structured prediction scores, or ``None``.
+
+    Returns a dict with keys:
+
+    - ``y_score``: 2D array (n_samples, n_classes) or None
+    - ``score_type``: "probability" / "decision" / None
+    - ``score_classes``: class labels matching columns of y_score, or None
+
+    Rules:
+
+    1. ``predict_proba`` is preferred when available (score_type="probability").
+    2. Otherwise ``decision_function`` is used (score_type="decision").
+       For binary classification a 1-D output is converted to two columns
+       where column 0 = -score and column 1 = +score (so argmax matches
+       ``estimator.classes_``).
+    3. If neither method exists, returns ``None``.
+    4. ``score_classes`` always matches ``estimator.classes_``.
+    """
+    import numpy as np
+
+    classes = getattr(estimator, "classes_", None)
+
     if hasattr(estimator, "predict_proba"):
-        return estimator.predict_proba(X)
-    if hasattr(estimator, "decision_function"):
-        return estimator.decision_function(X)
-    return None
+        y_score = np.asarray(estimator.predict_proba(X))
+        score_type = "probability"
+    elif hasattr(estimator, "decision_function"):
+        raw = np.asarray(estimator.decision_function(X))
+        score_type = "decision"
+        # Binary decision_function may return 1-D signed scores; convert to
+        # two columns so argmax(score) matches estimator.classes_.
+        if raw.ndim == 1:
+            y_score = np.stack([-raw, raw], axis=1)
+        else:
+            y_score = raw
+    else:
+        return None
+
+    if not np.all(np.isfinite(y_score)):
+        raise FloatingPointError(
+            "Non-finite prediction scores detected; refusing to write to database."
+        )
+
+    result: dict[str, Any] = {
+        "y_score": y_score.tolist(),
+        "score_type": score_type,
+        "score_classes": list(classes) if classes is not None else None,
+    }
+    return result
 
 
 # --- evaluation & visualization ----------------------------------------------

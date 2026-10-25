@@ -53,3 +53,22 @@ class KNNModel(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         return self._model.predict(X)
+
+    def predict_proba(self, X):
+        """Return class probabilities; columns follow ``classes_`` order."""
+        if self._model is None:
+            raise ValueError("KNNModel is not fitted. Call fit() first.")
+        return self._model.predict_proba(X)
+
+    def kneighbors(self, X, n_neighbors=None, return_distance=True):
+        """Read-only proxy to the wrapped sklearn ``kneighbors`` query.
+
+        Returns the distances and **training-set** indices of the nearest
+        neighbours (``train_index`` positions, not row ids of the original
+        dataset). ``fit`` / ``predict`` behaviour is unchanged.
+        """
+        if self._model is None:
+            raise ValueError("KNNModel is not fitted. Call fit() first.")
+        return self._model.kneighbors(
+            X, n_neighbors=n_neighbors, return_distance=return_distance
+        )
