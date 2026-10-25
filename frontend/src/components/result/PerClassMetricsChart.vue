@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
+import { useExportableChart } from './useExportableChart'
 import { classDisplayLookup, classDisplayName } from '@/utils/classDisplay'
 
 const props = defineProps({
@@ -57,8 +58,8 @@ const buildOption = () => {
         if (!row) return ''
         return [
           classLabel(row, index),
-          `Precision：${toPercent(row.precision).toFixed(2)}%`,
-          `Recall：${toPercent(row.recall).toFixed(2)}%`,
+          `精确率：${toPercent(row.precision).toFixed(2)}%`,
+          `召回率：${toPercent(row.recall).toFixed(2)}%`,
           `F1：${toPercent(row.f1).toFixed(2)}%`,
           `样本数：${toNumber(row.support)}`,
         ].join('<br/>')
@@ -100,13 +101,13 @@ const buildOption = () => {
       : [],
     series: [
       {
-        name: 'Precision',
+        name: '精确率',
         type: 'bar',
         barMaxWidth: 26,
         data: rows.map((row) => toPercent(row.precision)),
       },
       {
-        name: 'Recall',
+        name: '召回率',
         type: 'bar',
         barMaxWidth: 26,
         data: rows.map((row) => toPercent(row.recall)),
@@ -127,6 +128,15 @@ const { mount } = useChart(
   () => props.active && hasData.value,
 )
 
+useExportableChart({
+  id: 'per-class-metrics',
+  section: '分类表现',
+  title: '每类别分类指标',
+  order: 1,
+  available: () => hasData.value,
+  buildOption,
+})
+
 watch(
   () => [props.perClassMetrics, props.scoreClasses, props.scoreClassNames],
   () => {
@@ -142,7 +152,7 @@ watch(
       <div class="card-header">
         <div>
           <h3>每类别分类指标</h3>
-          <p>各个类别的 Precision / Recall / F1 对比</p>
+          <p>各个类别的精确率 / 召回率 / F1 对比</p>
         </div>
 
         <el-tag effect="plain" round>分类结果</el-tag>

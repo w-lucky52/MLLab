@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { calculateOvRRoc } from '@/utils/roc'
 import { classDisplayLookup, classDisplayName } from '@/utils/classDisplay'
 import { useChart } from './useChart'
+import { useExportableChart } from './useExportableChart'
 
 const props = defineProps({
   yTrue: { type: Array, default: null },
@@ -147,6 +148,15 @@ const { mount } = useChart(
   buildOption,
   () => props.active && hasCurves.value,
 )
+
+useExportableChart({
+  id: 'roc-curve',
+  section: '分类表现',
+  title: 'ROC 曲线',
+  order: 3,
+  available: () => hasCurves.value,
+  buildOption,
+})
 
 watch(
   () => [props.yTrue, props.yScore, props.scoreClasses, props.scoreClassNames],

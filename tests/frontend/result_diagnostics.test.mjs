@@ -1,8 +1,8 @@
 /**
- * Phase 6A — result diagnostics contract tests (Node built-in test runner).
+ * Phase 7A — result diagnostics contract tests (Node built-in test runner).
  *
- * Covers the pure helpers behind the new classification distribution /
- * confidence charts and the regression residual diagnostics. Run with:
+ * Covers the pure helpers behind the classification confidence chart and the
+ * regression residual diagnostics after the subtraction refactor. Run with:
  *   node --test tests/frontend/result_diagnostics.test.mjs
  */
 
@@ -11,99 +11,10 @@ import assert from 'node:assert/strict'
 
 import {
   buildBins,
-  classDistribution,
   confidenceHistogram,
   predictionConfidence,
   regressionDiagnostics,
-  regressionInsight,
 } from '../../frontend/src/utils/resultDiagnostics.js'
-
-// --- classification: class distribution -------------------------------------
-
-test('class distribution keeps scoreClasses order and counts each class', () => {
-  const yTrue = [2, 2, 0, 1]
-  const yPred = [2, 0, 0, 1]
-  const result = classDistribution(yTrue, yPred, [2, 0, 1], null)
-
-  assert.equal(result.available, true)
-  assert.deepEqual(
-    result.classes.map((item) => item.value),
-    [2, 0, 1],
-  )
-  assert.deepEqual(
-    result.classes.map((item) => item.actualCount),
-    [2, 1, 1],
-  )
-  assert.deepEqual(
-    result.classes.map((item) => item.predictedCount),
-    [1, 2, 1],
-  )
-})
-
-test('actual and predicted totals always equal the sample counts', () => {
-  const yTrue = ['a', 'b', 'b', 'c']
-  const yPred = ['a', 'a', 'c', 'c']
-  const result = classDistribution(yTrue, yPred, null, null)
-
-  assert.equal(result.actualTotal, yTrue.length)
-  assert.equal(result.predictedTotal, yPred.length)
-  assert.equal(
-    result.classes.reduce((sum, item) => sum + item.actualCount, 0),
-    yTrue.length,
-  )
-  assert.equal(
-    result.classes.reduce((sum, item) => sum + item.predictedCount, 0),
-    yPred.length,
-  )
-})
-
-test('classes missing from scoreClasses are appended in first-appearance order', () => {
-  const result = classDistribution(['x', 'y', 'x'], ['y', 'y', 'z'], ['y'], null)
-
-  assert.deepEqual(
-    result.classes.map((item) => item.value),
-    ['y', 'x', 'z'],
-  )
-})
-
-test('friendly names are used, invalid names fall back to raw labels', () => {
-  const friendly = classDistribution([0, 1], [0, 1], [0, 1], ['setosa', 'versicolor'])
-  assert.deepEqual(
-    friendly.classes.map((item) => item.name),
-    ['setosa', 'versicolor'],
-  )
-
-  const fallback = classDistribution([0, 1], [0, 1], [0, 1], ['only-one'])
-  assert.deepEqual(
-    fallback.classes.map((item) => item.name),
-    ['0', '1'],
-  )
-
-  const emptyName = classDistribution([0, 1], [0, 1], [0, 1], ['setosa', ''])
-  assert.deepEqual(
-    emptyName.classes.map((item) => item.name),
-    ['0', '1'],
-  )
-})
-
-test('numeric and string labels are never merged into one bucket', () => {
-  const result = classDistribution([1, '1'], [1, '1'], null, null)
-
-  assert.equal(result.classes.length, 2)
-  assert.deepEqual(
-    result.classes.map((item) => item.value),
-    [1, '1'],
-  )
-})
-
-test('invalid class inputs produce an unavailable result', () => {
-  assert.equal(classDistribution([], [], [0], null).available, false)
-  assert.equal(classDistribution([0, 1], [0], [0, 1], null).available, false)
-  assert.equal(classDistribution([[0], [1]], [0, 1], null, null).available, false)
-  assert.equal(classDistribution([0, Number.NaN], [0, 1], null, null).available, false)
-  assert.equal(classDistribution([0, Infinity], [0, 1], null, null).available, false)
-  assert.equal(classDistribution(null, [0], null, null).available, false)
-})
 
 // --- classification: confidence / margin ------------------------------------
 
@@ -348,23 +259,9 @@ test('input arrays are never modified', () => {
   const trueCopy = [...yTrue]
   const predCopy = [...yPred]
 
-  classDistribution(['b', 'a'], ['a', 'a'], ['a', 'b'], ['A', 'B'])
   predictionConfidence([0, 1], [0, 1], [[0.9, 0.1], [0.2, 0.8]], 'probability')
   regressionDiagnostics(yTrue, yPred)
 
   assert.deepEqual(yTrue, trueCopy)
   assert.deepEqual(yPred, predCopy)
-})
-
-test('regression insight reports direction without causal claims', () => {
-  const under = regressionInsight(regressionDiagnostics([5, 5, 5], [3, 3, 3]))
-  assert.equal(under.available, true)
-  assert.match(under.statements[0], /低估/)
-  assert.doesNotMatch(under.statements.join(''), /很好|很差|过拟合|异方差|最优/)
-
-  const over = regressionInsight(regressionDiagnostics([3, 3, 3], [5, 5, 5]))
-  assert.match(over.statements[0], /高估/)
-
-  const near = regressionInsight(regressionDiagnostics([100, 101], [100.0001, 101.0]))
-  assert.match(near.statements[0], /接近 0/)
 })

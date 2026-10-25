@@ -110,6 +110,21 @@ class PerClassMetrics(BaseModel):
     support: int
 
 
+class TrainingLogEntry(BaseModel):
+    """One structured entry of the experiment ``process_log``.
+
+    ``elapsed_ms`` is the pipeline-relative time in milliseconds; it is
+    ``None`` for ``iteration_checkpoint`` entries because per-iteration
+    timings are not recorded by the models. ``details`` carries the
+    structured payload — the frontend renders display text from it.
+    """
+
+    sequence: int
+    event: str
+    elapsed_ms: float | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 class TrainingInfo(BaseModel):
     """Training metadata returned by iterative models.
 
@@ -140,6 +155,14 @@ class TrainingInfo(BaseModel):
     # together or omitted together.
     class_feature_means: list[list[float]] | None = None
     class_feature_variances: list[list[float]] | None = None
+    # Real per-model explanation payload (linear contributions, KNN
+    # neighbours, GaussianNB likelihoods, CART decision paths or MLP
+    # permutation importance). ``None`` when the model has no faithful
+    # explanation or for records written before this field existed.
+    explanation_data: dict[str, Any] | None = None
+    # Structured training-process log. ``None`` for experiments recorded
+    # before this field existed — the frontend hides the log panel then.
+    process_log: list[TrainingLogEntry] | None = None
 
 
 # --- charts ------------------------------------------------------------------

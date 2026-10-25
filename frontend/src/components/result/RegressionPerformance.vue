@@ -1,7 +1,6 @@
 <script setup>
 import { computed } from 'vue'
 import ActualPredictedChart from './ActualPredictedChart.vue'
-import RegressionInsight from './RegressionInsight.vue'
 import ResidualHistogramChart from './ResidualHistogramChart.vue'
 import ResidualScatterChart from './ResidualScatterChart.vue'
 import TopAbsoluteErrorsChart from './TopAbsoluteErrorsChart.vue'
@@ -29,17 +28,15 @@ const hasData = computed(() => diagnostics.value.available)
     </el-card>
 
     <template v-else>
-      <div class="performance-row wide-left">
+      <div class="performance-row">
         <ActualPredictedChart :y-true="yTrue" :y-pred="yPred" :active="active" />
-        <ResidualHistogramChart :y-true="yTrue" :y-pred="yPred" :active="active" />
+        <ResidualScatterChart :y-true="yTrue" :y-pred="yPred" :active="active" />
       </div>
 
-      <div class="performance-row wide-left">
-        <ResidualScatterChart :y-true="yTrue" :y-pred="yPred" :active="active" />
+      <div class="performance-row">
+        <ResidualHistogramChart :y-true="yTrue" :y-pred="yPred" :active="active" />
         <TopAbsoluteErrorsChart :y-true="yTrue" :y-pred="yPred" :active="active" />
       </div>
-
-      <RegressionInsight :y-true="yTrue" :y-pred="yPred" />
     </template>
   </div>
 </template>
@@ -54,16 +51,14 @@ const hasData = computed(() => diagnostics.value.available)
 
 .performance-row {
   display: grid;
+  align-items: stretch;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
 .performance-row > * {
   min-width: 0;
-}
-
-.performance-row.wide-left {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  height: 100%;
 }
 
 .chart-card :deep(.el-card__header) {
@@ -72,6 +67,14 @@ const hasData = computed(() => diagnostics.value.available)
 
 .chart-card :deep(.el-card__body) {
   padding: 5px 16px 15px;
+}
+
+.regression-performance :deep(.chart) {
+  height: 350px;
+}
+
+.regression-performance :deep(.chart-empty:not(.compact)) {
+  min-height: 350px;
 }
 
 .chart-empty {
@@ -85,9 +88,12 @@ const hasData = computed(() => diagnostics.value.available)
 }
 
 @media (max-width: 1100px) {
-  .performance-row,
-  .performance-row.wide-left {
-    grid-template-columns: 1fr;
+  .performance-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .performance-row > * {
+    height: auto;
   }
 }
 </style>

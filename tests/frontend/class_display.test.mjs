@@ -16,8 +16,8 @@ import {
 } from '../../frontend/src/utils/classDisplay.js'
 import { calculateOvRRoc } from '../../frontend/src/utils/roc.ts'
 import {
-  coefficientRows,
   normalizeClassNames,
+  summarizeCoefficients,
 } from '../../frontend/src/utils/modelExplanation.js'
 
 const TARGET_NAMES = ['setosa', 'versicolor', 'virginica']
@@ -117,15 +117,23 @@ test('coefficient heatmap class rows keep their original order', () => {
 
 test('coefficient row order is independent of class display names', () => {
   const vector = [0.5, -2.0, 1.0]
-  const withNames = coefficientRows(vector, ['f0', 'f1', 'f2'])
-  const withoutNames = coefficientRows(vector, null)
+  const withNames = summarizeCoefficients({
+    coefficients: vector,
+    featureNames: ['f0', 'f1', 'f2'],
+    intercept: null,
+  })
+  const withoutNames = summarizeCoefficients({
+    coefficients: vector,
+    featureNames: null,
+    intercept: null,
+  })
 
   assert.deepEqual(
-    withNames.map((row) => row.value),
-    withoutNames.map((row) => row.value),
+    withNames.rows.map((row) => row.value),
+    withoutNames.rows.map((row) => row.value),
   )
   assert.deepEqual(
-    withNames.map((row) => row.value),
+    withNames.rows.map((row) => row.value),
     [-2.0, 1.0, 0.5],
   )
 })

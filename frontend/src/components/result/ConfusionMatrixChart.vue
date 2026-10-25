@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
+import { useExportableChart } from './useExportableChart'
 import { classDisplayLookup, classDisplayName } from '@/utils/classDisplay'
 
 const props = defineProps({
@@ -138,6 +139,15 @@ const { mount, render } = useChart(
   buildOption,
   () => props.active && hasData.value,
 )
+
+useExportableChart({
+  id: 'confusion-matrix',
+  section: '分类表现',
+  title: '混淆矩阵',
+  order: 2,
+  available: () => hasData.value,
+  buildOption,
+})
 
 watch(mode, () => {
   render()

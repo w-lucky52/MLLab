@@ -1,7 +1,8 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
-import { formatNumber, normalizeCurve } from '@/utils/training'
+import { useExportableChart } from './useExportableChart'
+import { curveSummary, formatNumber, normalizeCurve } from '@/utils/training'
 
 const props = defineProps({
   lossHistory: { type: Array, default: null },
@@ -13,6 +14,17 @@ const chartEl = ref(null)
 
 const curve = computed(() => normalizeCurve(props.lossHistory))
 const hasData = computed(() => Boolean(curve.value))
+
+const stats = computed(() => {
+  const summary = curveSummary(curve.value)
+  if (!summary) return []
+  return [
+    { label: '记录轮数', value: String(summary.count) },
+    { label: '初始值', value: formatNumber(summary.initial) },
+    { label: '最终值', value: formatNumber(summary.final) },
+    { label: '最小值', value: formatNumber(summary.minimum) },
+  ]
+})
 
 const axisName = computed(() => {
   if (props.lossName === 'objective') return '目标函数值'
@@ -93,6 +105,15 @@ const { mount } = useChart(
   () => props.active && hasData.value,
 )
 
+useExportableChart({
+  id: 'training-loss',
+  section: '训练过程',
+  title: '损失曲线',
+  order: 1,
+  available: () => hasData.value,
+  buildOption,
+})
+
 watch(() => props.lossHistory, () => {
   mount()
 }, { deep: true })
@@ -107,7 +128,12 @@ watch(() => props.lossHistory, () => {
           <p>{{ subtitle }}</p>
         </div>
 
-        <el-tag effect="plain" round>{{ lossName === 'training_loss' ? '训练集损失' : '目标函数' }}</el-tag>
+        <div class="header-tags">
+          <el-tag v-for="item in stats" :key="item.label" effect="plain" round>
+            {{ item.label }} {{ item.value }}
+          </el-tag>
+          <el-tag effect="plain" round>{{ lossName === 'training_loss' ? '训练集损失' : '目标函数' }}</el-tag>
+        </div>
       </div>
     </template>
 
@@ -147,14 +173,21 @@ watch(() => props.lossHistory, () => {
   font-size: 11px;
 }
 
+.header-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .chart {
   width: 100%;
-  height: 360px;
+  height: 350px;
 }
 
 .chart-empty {
   display: grid;
-  min-height: 340px;
+  min-height: 350px;
   place-items: center;
 }
 </style>

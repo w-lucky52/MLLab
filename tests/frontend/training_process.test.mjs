@@ -1,9 +1,10 @@
 /**
- * Phase 6B — training-process helpers contract tests (Node built-in runner).
+ * Phase 7A — training-process helpers contract tests (Node built-in runner).
  *
- * Covers the pure helpers behind the training tab: split validation, curve
- * summary statistics, per-algorithm training flows and no-curve
- * explanations. Run with:
+ * Covers the pure helpers behind the training tab after the subtraction
+ * refactor: summary cards (duration / split / scale / standardize), loss-curve
+ * normalization and statistics for the chart header, and the per-algorithm
+ * step flows. Run with:
  *   node --test tests/frontend/training_process.test.mjs
  */
 
@@ -11,12 +12,17 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  MISSING_CURVE_HINT,
-  curveStatements,
+  UNRECORDED,
+  curveSummary,
+  formatDuration,
+  formatNumber,
+  formatSampleSplit,
   getAlgorithmTrainingFlow,
-  getNoCurveExplanation,
-  normalizeTrainingSplit,
-  summarizeTrainingCurve,
+  isIterativeModel,
+  iterationSummary,
+  modelScaleSummary,
+  normalizeCurve,
+  standardizeSummary,
 } from '../../frontend/src/utils/training.js'
 
 const BANNED_WORDS = /很好|很差|过拟合|泛化良好|最优模型/
@@ -37,157 +43,145 @@ const NON_ITERATIVE_MODELS = [
   'random_forest_regressor',
 ]
 
-// --- normalizeTrainingSplit ---------------------------------------------------
+// --- formatting helpers -------------------------------------------------------
 
-test('normalizeTrainingSplit computes counts and percentages from real data', () => {
-  const split = normalizeTrainingSplit(120, 30)
-
-  assert.equal(split.available, true)
-  assert.equal(split.trainCount, 120)
-  assert.equal(split.testCount, 30)
-  assert.equal(split.total, 150)
-  assert.equal(split.trainPercent, 80)
-  assert.equal(split.testPercent, 20)
+test('formatDuration renders milliseconds and seconds', () => {
+  assert.equal(formatDuration(320), '320 ms')
+  assert.equal(formatDuration(1520), '1.52 s')
+  assert.equal(formatDuration(null), UNRECORDED)
+  assert.equal(formatDuration(-5), UNRECORDED)
+  assert.equal(formatDuration('abc'), UNRECORDED)
 })
 
-test('normalizeTrainingSplit rejects missing, negative, non-integer and non-finite values', () => {
-  const invalidInputs = [
-    [null, 30],
-    [120, undefined],
-    [-1, 30],
-    [120, -5],
-    [1.5, 30],
-    [120, 0.5],
-    [Number.NaN, 30],
-    [Number.POSITIVE_INFINITY, 30],
-    [120, Number.NEGATIVE_INFINITY],
-    [0, 0],
-  ]
+test('formatSampleSplit joins recorded train and test counts', () => {
+  assert.equal(formatSampleSplit({ train_sample_count: 120, test_sample_count: 30 }), '训练 120 / 测试 30')
+  assert.equal(formatSampleSplit({ train_sample_count: 120 }), '训练 120')
+  assert.equal(formatSampleSplit({}), UNRECORDED)
+  assert.equal(formatSampleSplit(null), UNRECORDED)
+})
 
-  for (const [train, test] of invalidInputs) {
-    assert.equal(normalizeTrainingSplit(train, test).available, false, `${train}/${test}`)
+test('formatNumber never leaks NaN or undefined text', () => {
+  assert.equal(formatNumber(null), UNRECORDED)
+  assert.equal(formatNumber(undefined), UNRECORDED)
+  assert.equal(formatNumber(Number.NaN), UNRECORDED)
+  assert.equal(formatNumber(Number.POSITIVE_INFINITY), UNRECORDED)
+  assert.equal(formatNumber(''), UNRECORDED)
+  assert.equal(formatNumber(4), '4')
+  assert.equal(formatNumber(0.123456789), '0.123457')
+})
+
+// --- iterationSummary -----------------------------------------------------------
+
+test('iterationSummary prefers recorded n_iter over anything else', () => {
+  assert.equal(
+    iterationSummary({ n_iter: 57 }, { max_iter: 200 }),
+    '57 / 200',
+  )
+  assert.equal(iterationSummary({ n_iter: 57 }, null), '57 次')
+})
+
+test('iterationSummary falls back to recorded train_score_ rounds', () => {
+  const info = { loss_source: 'train_score_', loss_history: [1, 0.9, 0.8] }
+  assert.equal(iterationSummary(info, null), '记录 3 轮')
+})
+
+test('iterationSummary never invents rounds for missing data', () => {
+  assert.equal(iterationSummary({}, null), '不适用')
+  assert.equal(iterationSummary({ loss_source: 'train_score_', loss_history: [] }, null), '不适用')
+})
+
+// --- standardizeSummary ---------------------------------------------------------
+
+test('standardizeSummary maps recorded booleans and stays unrecorded otherwise', () => {
+  assert.equal(standardizeSummary(true), '已开启')
+  assert.equal(standardizeSummary(false), '未开启')
+  assert.equal(standardizeSummary(undefined), UNRECORDED)
+  assert.equal(standardizeSummary(null), UNRECORDED)
+})
+
+// --- modelScaleSummary ------------------------------------------------------------
+
+test('modelScaleSummary shows iterations for iterative models', () => {
+  for (const modelName of ITERATIVE_MODELS) {
+    const result = modelScaleSummary(modelName, { n_iter: 12 }, { max_iter: 100 }, null)
+    assert.equal(result.label, '迭代情况', modelName)
+    assert.equal(result.value, '12 / 100', modelName)
   }
 })
 
-// --- summarizeTrainingCurve ---------------------------------------------------
+test('modelScaleSummary reads K for KNN from recorded parameters only', () => {
+  const resolved = modelScaleSummary('knn_classifier', {}, { n_neighbors: 7 }, null)
+  assert.equal(resolved.label, '邻居数量 K')
+  assert.equal(resolved.value, '7')
 
-test('summarizeTrainingCurve summarizes a normal decreasing curve', () => {
-  const summary = summarizeTrainingCurve([10, 6, 4, 3])
+  const fallback = modelScaleSummary('knn_classifier', {}, null, { n_neighbors: 3 })
+  assert.equal(fallback.value, '3')
 
-  assert.equal(summary.available, true)
-  assert.equal(summary.count, 4)
-  assert.equal(summary.initial, 10)
-  assert.equal(summary.final, 3)
-  assert.equal(summary.minimum, 3)
-  assert.equal(summary.minRound, 4)
-  assert.equal(summary.absoluteChange, -7)
-  assert.equal(summary.relativeChangePercent, -70)
-  assert.equal(summary.finalVsMinimum, 0)
+  const missing = modelScaleSummary('knn_classifier', {}, null, null)
+  assert.equal(missing.value, UNRECORDED)
 })
 
-test('summarizeTrainingCurve handles non-monotonic curves', () => {
-  const summary = summarizeTrainingCurve([5, 2, 8, 3])
+test('modelScaleSummary shows the recorded class count for GaussianNB', () => {
+  const result = modelScaleSummary('gaussian_nb', { classes: ['a', 'b', 'c'] }, null, null)
+  assert.equal(result.label, '类别数')
+  assert.equal(result.value, '3')
 
-  assert.equal(summary.minimum, 2)
-  assert.equal(summary.minRound, 2)
-  assert.equal(summary.final, 3)
-  assert.equal(summary.absoluteChange, -2)
-  assert.equal(summary.finalVsMinimum, 1)
+  assert.equal(modelScaleSummary('gaussian_nb', {}, null, null).value, UNRECORDED)
 })
 
-test('summarizeTrainingCurve handles constant curves', () => {
-  const summary = summarizeTrainingCurve([4, 4, 4])
+test('modelScaleSummary shows max_depth for decision trees without backfilling defaults', () => {
+  const result = modelScaleSummary('decision_tree_regressor', {}, { max_depth: 6 }, null)
+  assert.equal(result.label, '最大深度')
+  assert.equal(result.value, '6')
 
-  assert.equal(summary.available, true)
-  assert.equal(summary.absoluteChange, 0)
-  assert.equal(summary.relativeChangePercent, 0)
-  assert.equal(summary.finalVsMinimum, 0)
-  assert.equal(summary.minRound, 1)
+  const fallback = modelScaleSummary('decision_tree_regressor', {}, null, { max_depth: 4 })
+  assert.equal(fallback.value, '4')
+
+  // A recorded null (unlimited depth) is not a number: show 未记录, never a default.
+  const unlimited = modelScaleSummary('decision_tree_regressor', {}, { max_depth: null }, null)
+  assert.equal(unlimited.value, UNRECORDED)
 })
 
-test('summarizeTrainingCurve handles single-point curves', () => {
-  const summary = summarizeTrainingCurve([7])
+test('modelScaleSummary shows tree count for random forests', () => {
+  const result = modelScaleSummary('random_forest_regressor', {}, { n_estimators: 120 }, null)
+  assert.equal(result.label, '树数量')
+  assert.equal(result.value, '120')
 
-  assert.equal(summary.available, true)
-  assert.equal(summary.count, 1)
-  assert.equal(summary.initial, 7)
-  assert.equal(summary.final, 7)
-  assert.equal(summary.minimum, 7)
-  assert.equal(summary.minRound, 1)
-  assert.equal(summary.absoluteChange, 0)
-  assert.equal(summary.relativeChangePercent, 0)
+  assert.equal(modelScaleSummary('random_forest_regressor', {}, null, null).value, UNRECORDED)
 })
 
-test('summarizeTrainingCurve never divides by a zero initial value', () => {
-  const summary = summarizeTrainingCurve([0, 1])
-
-  assert.equal(summary.available, true)
-  assert.equal(summary.relativeChangePercent, null)
-
-  const statements = curveStatements(summary)
-  assert.ok(statements.some((statement) => statement.includes('相对变化不适用')))
+test('modelScaleSummary stays unrecorded for unknown models', () => {
+  const result = modelScaleSummary('some_unknown_model', {}, null, null)
+  assert.equal(result.label, '模型规模')
+  assert.equal(result.value, UNRECORDED)
 })
 
-test('summarizeTrainingCurve resolves repeated minimums to the first round', () => {
-  const summary = summarizeTrainingCurve([5, 3, 3, 4])
+// --- normalizeCurve / curveSummary ----------------------------------------------
 
-  assert.equal(summary.minimum, 3)
-  assert.equal(summary.minRound, 2)
-})
+test('normalizeCurve returns a finite copy and rejects bad input', () => {
+  const input = [3, 1, 2]
+  const curve = normalizeCurve(input)
+  assert.deepEqual(curve, [3, 1, 2])
+  assert.notEqual(curve, input)
 
-test('summarizeTrainingCurve rejects empty, nested and non-finite inputs', () => {
-  const invalidInputs = [
-    null,
-    undefined,
-    '1,2,3',
-    [],
-    [
-      [1, 2],
-      [3, 4],
-    ],
-    [1, Number.NaN],
-    [1, Number.POSITIVE_INFINITY],
-    [1, '2'],
-  ]
-
-  for (const input of invalidInputs) {
-    assert.equal(summarizeTrainingCurve(input).available, false, String(input))
+  for (const bad of [null, undefined, [], '1,2', [1, Number.NaN], [1, '2'], [[1]]]) {
+    assert.equal(normalizeCurve(bad), null, String(bad))
   }
 })
 
-test('summarizeTrainingCurve does not modify the input array', () => {
-  const input = [3, 1, 2, 1]
-  const snapshot = [...input]
-  summarizeTrainingCurve(input)
+test('curveSummary reports count, initial, final and minimum', () => {
+  const summary = curveSummary([10, 6, 4, 3])
+  assert.deepEqual(summary, { count: 4, initial: 10, final: 3, minimum: 3 })
 
-  assert.deepEqual(input, snapshot)
-})
-
-// --- curveStatements ----------------------------------------------------------
-
-test('curveStatements describes direction objectively', () => {
-  const decreasing = curveStatements(summarizeTrainingCurve([10, 3]))
-  assert.ok(decreasing.some((statement) => statement.includes('最终值低于初始值')))
-
-  const increasing = curveStatements(summarizeTrainingCurve([1, 5]))
-  assert.ok(increasing.some((statement) => statement.includes('最终值高于初始值')))
-
-  const constant = curveStatements(summarizeTrainingCurve([4, 4]))
-  assert.ok(constant.some((statement) => statement.includes('最终值等于初始值')))
-
-  const minimum = curveStatements(summarizeTrainingCurve([5, 2, 8]))
-  assert.ok(minimum.some((statement) => statement.includes('最低记录出现在第 2 轮')))
-})
-
-test('curveStatements returns nothing for unavailable summaries', () => {
-  assert.deepEqual(curveStatements(summarizeTrainingCurve([])), [])
-  assert.deepEqual(curveStatements(null), [])
+  assert.deepEqual(curveSummary([7]), { count: 1, initial: 7, final: 7, minimum: 7 })
+  assert.equal(curveSummary([]), null)
+  assert.equal(curveSummary(null), null)
 })
 
 // --- getAlgorithmTrainingFlow -------------------------------------------------
 
-test('KNN flow explains neighbor search and reads recorded parameters', () => {
-  const flow = getAlgorithmTrainingFlow('knn_classifier', null)
+test('KNN flow explains neighbor search as compact steps', () => {
+  const flow = getAlgorithmTrainingFlow('knn_classifier')
 
   assert.equal(flow.available, true)
   assert.deepEqual(flow.steps, [
@@ -197,28 +191,10 @@ test('KNN flow explains neighbor search and reads recorded parameters', () => {
     '按 weights 规则投票',
     '输出类别',
   ])
-  assert.ok(flow.notes.some((note) => note.includes('没有基于梯度的参数优化过程')))
-  assert.ok(flow.notes.some((note) => note.includes('没有逐轮损失曲线')))
-  assert.ok(flow.notes.some((note) => note.includes('训练阶段主要保存训练数据')))
-
-  // Missing parameters must never be filled with registry defaults.
-  const joined = flow.notes.join('\n')
-  assert.equal((joined.match(/未记录/g) || []).length, 3)
-
-  const recorded = getAlgorithmTrainingFlow('knn_classifier', {
-    n_neighbors: 5,
-    weights: 'distance',
-    p: 2,
-  })
-  const recordedJoined = recorded.notes.join('\n')
-  assert.ok(recordedJoined.includes('n_neighbors = 5'))
-  assert.ok(recordedJoined.includes('weights = distance'))
-  assert.ok(recordedJoined.includes('p = 2'))
-  assert.ok(!recordedJoined.includes('未记录'))
 })
 
-test('GaussianNB flow explains statistical estimation', () => {
-  const flow = getAlgorithmTrainingFlow('gaussian_nb', null)
+test('GaussianNB flow explains statistical estimation as compact steps', () => {
+  const flow = getAlgorithmTrainingFlow('gaussian_nb')
 
   assert.deepEqual(flow.steps, [
     '按类别划分训练样本',
@@ -227,16 +203,10 @@ test('GaussianNB flow explains statistical estimation', () => {
     '计算后验相关分数',
     '输出概率最大的类别',
   ])
-  assert.ok(flow.notes.some((note) => note.includes('统计估计')))
-  assert.ok(flow.notes.some((note) => note.includes('不执行梯度迭代')))
-  assert.ok(flow.notes.some((note) => note.includes('var_smoothing = 未记录')))
-
-  const recorded = getAlgorithmTrainingFlow('gaussian_nb', { var_smoothing: 1e-9 })
-  assert.ok(recorded.notes.some((note) => note.includes('var_smoothing = 1e-9')))
 })
 
-test('decision tree flow explains recursive splitting without fake rounds', () => {
-  const flow = getAlgorithmTrainingFlow('decision_tree_regressor', null)
+test('decision tree flow explains recursive splitting as compact steps', () => {
+  const flow = getAlgorithmTrainingFlow('decision_tree_regressor')
 
   assert.deepEqual(flow.steps, [
     '搜索候选特征与划分阈值',
@@ -245,12 +215,10 @@ test('decision tree flow explains recursive splitting without fake rounds', () =
     '满足停止条件后生成叶节点',
     '叶节点输出预测值',
   ])
-  assert.ok(flow.notes.some((note) => note.includes('递归划分')))
-  assert.ok(flow.notes.some((note) => note.includes('不代表迭代轮数')))
 })
 
-test('random forest flow explains tree aggregation without fake iterations', () => {
-  const flow = getAlgorithmTrainingFlow('random_forest_regressor', { n_estimators: 120 })
+test('random forest flow explains tree aggregation as compact steps', () => {
+  const flow = getAlgorithmTrainingFlow('random_forest_regressor')
 
   assert.deepEqual(flow.steps, [
     '生成多组训练子样本',
@@ -259,9 +227,6 @@ test('random forest flow explains tree aggregation without fake iterations', () 
     '聚合多棵树的预测结果',
     '输出平均预测值',
   ])
-  assert.ok(flow.notes.some((note) => note.includes('多棵决策树')))
-  assert.ok(flow.notes.some((note) => note.includes('n_estimators = 120')))
-  assert.ok(flow.notes.some((note) => note.includes('不是优化迭代次数')))
 })
 
 test('iterative models expose their gradient-based training mechanisms', () => {
@@ -275,87 +240,48 @@ test('iterative models expose their gradient-based training mechanisms', () => {
   }
 
   for (const modelName of ITERATIVE_MODELS) {
-    const flow = getAlgorithmTrainingFlow(modelName, null)
+    const flow = getAlgorithmTrainingFlow(modelName)
     assert.equal(flow.available, true)
     assert.equal(flow.steps.length, 5, modelName)
     assert.ok(flow.steps.includes(keySteps[modelName]), modelName)
   }
 })
 
-test('GBDT flow states the curve is a training loss, not test error', () => {
-  const flow = getAlgorithmTrainingFlow('gbdt_regressor', null)
-
-  assert.ok(flow.notes.some((note) => note.includes('train_score_')))
-  assert.ok(flow.notes.some((note) => note.includes('训练集损失')))
-  assert.ok(flow.notes.some((note) => note.includes('不代表测试集误差')))
-})
-
 test('unknown models fall back to a safe generic flow', () => {
-  const flow = getAlgorithmTrainingFlow('some_unknown_model', { foo: 1 })
+  const flow = getAlgorithmTrainingFlow('some_unknown_model')
 
   assert.equal(flow.available, true)
   assert.ok(flow.steps.length > 0)
-  assert.ok(flow.notes.length > 0)
-
-  assert.deepEqual(getNoCurveExplanation('some_unknown_model'), ['该模型未提供逐轮损失曲线。'])
-})
-
-// --- getNoCurveExplanation ------------------------------------------------------
-
-test('no-curve explanations exist for every non-iterative model', () => {
-  const keywords = {
-    knn_classifier: '基于梯度',
-    gaussian_nb: '统计估计',
-    decision_tree_regressor: '递归划分',
-    random_forest_regressor: '多棵决策树',
-  }
-
-  for (const modelName of NON_ITERATIVE_MODELS) {
-    const statements = getNoCurveExplanation(modelName)
-    assert.ok(statements.length >= 2, modelName)
-    assert.ok(
-      statements.some((statement) => statement.includes(keywords[modelName])),
-      modelName,
-    )
-    assert.ok(
-      statements.some((statement) => statement.includes('损失曲线')),
-      modelName,
-    )
-  }
 })
 
 // --- global wording and data-integrity guards -----------------------------------
 
-test('no flow or explanation uses subjective quality wording', () => {
+test('no flow uses subjective quality wording', () => {
   const texts = []
 
   for (const modelName of [...ITERATIVE_MODELS, ...NON_ITERATIVE_MODELS, 'unknown']) {
-    const flow = getAlgorithmTrainingFlow(modelName, null)
-    texts.push(flow.title, ...flow.steps, ...flow.notes)
-    texts.push(...getNoCurveExplanation(modelName))
+    const flow = getAlgorithmTrainingFlow(modelName)
+    texts.push(flow.title, ...flow.steps)
   }
-
-  texts.push(...curveStatements(summarizeTrainingCurve([3, 1, 2])))
 
   assert.doesNotMatch(texts.join('\n'), BANNED_WORDS)
 })
 
-test('non-iterative flows never generate simulated loss data', () => {
-  for (const modelName of NON_ITERATIVE_MODELS) {
-    const flow = getAlgorithmTrainingFlow(modelName, null)
+test('flows never generate simulated loss data', () => {
+  for (const modelName of [...ITERATIVE_MODELS, ...NON_ITERATIVE_MODELS, 'unknown']) {
+    const flow = getAlgorithmTrainingFlow(modelName)
 
-    assert.deepEqual(Object.keys(flow).sort(), ['available', 'notes', 'steps', 'title'])
-    for (const value of Object.values(flow)) {
-      if (Array.isArray(value)) {
-        assert.ok(
-          value.every((item) => typeof item === 'string'),
-          `${modelName} must only carry string lists`,
-        )
-      }
-    }
+    assert.deepEqual(Object.keys(flow).sort(), ['available', 'steps', 'title'])
+    assert.ok(flow.steps.every((item) => typeof item === 'string'), modelName)
   }
 })
 
-test('missing-curve hint matches the agreed wording', () => {
-  assert.equal(MISSING_CURVE_HINT, '该历史实验未保存训练曲线，无法展示逐轮变化。')
+test('isIterativeModel matches the agreed model split', () => {
+  for (const modelName of ITERATIVE_MODELS) {
+    assert.equal(isIterativeModel(modelName), true, modelName)
+  }
+  for (const modelName of NON_ITERATIVE_MODELS) {
+    assert.equal(isIterativeModel(modelName), false, modelName)
+  }
+  assert.equal(isIterativeModel('some_unknown_model'), false)
 })

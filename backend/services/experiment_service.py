@@ -9,14 +9,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.core.config import get_settings
 from backend.database import session as db_session
 from backend.database.models import Experiment, ExperimentStatus
-from backend.services import ml_bridge
+from backend.services import ml_bridge, model_explanation
 from backend.services.ml_contracts import TASK_REGRESSION
+from backend.services.training_log import (
+    CLASSIFICATION_LOG_METRICS,
+    REGRESSION_LOG_METRICS,
+    TrainingProcessLog,
+    finite_scalar_metrics,
+    sample_iteration_checkpoints,
+)
 
 
 def create_experiment(db: Session, payload: Any) -> Experiment:
@@ -94,11 +102,21 @@ def run_experiment(experiment_id: int) -> None:
 
 def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
     """Run the train/evaluate pipeline; raises on any failure."""
+    pipeline_log = TrainingProcessLog()
     try:
         data = ml_bridge.load_dataset(experiment.dataset_name)
     except KeyError as exc:
         raise ValueError(f"Unknown dataset: {experiment.dataset_name!r}") from exc
     task_type = data.task_type
+    pipeline_log.add(
+        "dataset_loaded",
+        {
+            "dataset_name": experiment.dataset_name,
+            "sample_count": int(len(data.y)),
+            "feature_count": int(np.asarray(data.X).shape[1]),
+            "task_type": task_type,
+        },
+    )
 
     try:
         model = ml_bridge.model_detail(experiment.model_name)
@@ -121,17 +139,42 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
         task_type=task_type,
         standardize=standardize,
     )
+    pipeline_log.add(
+        "data_prepared",
+        {
+            "train_sample_count": int(len(X_train)),
+            "test_sample_count": int(len(X_test)),
+            "test_size": float(experiment.test_size),
+            "random_state": int(experiment.random_state),
+            "standardize": bool(standardize),
+            "stratified": task_type == "classification",
+        },
+    )
 
     estimator = ml_bridge.create_estimator(
         experiment.model_name, experiment.hyperparameters,
         random_state=experiment.random_state,
     )
+    pipeline_log.add(
+        "estimator_created",
+        {
+            "model_name": experiment.model_name,
+            "estimator_class": type(estimator).__name__,
+        },
+    )
+    pipeline_log.add(
+        "training_started",
+        {
+            "model_name": experiment.model_name,
+            "train_sample_count": int(len(X_train)),
+        },
+    )
     fit_start = time.perf_counter()
     estimator.fit(X_train, y_train)
     fit_duration_ms = (time.perf_counter() - fit_start) * 1000.0
 
-    y_pred = estimator.predict(X_test)
-
+    # ``get_training_info`` only reads the fitted estimator, so it can run
+    # before prediction; this keeps the process log in chronological order.
     feature_names = list(data.feature_names) if hasattr(data, "feature_names") else None
     training_info = _jsonable(
         ml_bridge.get_training_info(
@@ -144,9 +187,39 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
         )
     )
 
+    pipeline_log.extend_iteration_checkpoints(
+        sample_iteration_checkpoints(
+            training_info.get("loss_history"),
+            training_info.get("loss_name"),
+            training_info.get("loss_source"),
+        )
+    )
+    loss_history = training_info.get("loss_history")
+    pipeline_log.add(
+        "training_completed",
+        {
+            "fit_duration_ms": fit_duration_ms,
+            "n_iter": training_info.get("n_iter"),
+            "stop_reason": training_info.get("stop_reason"),
+            "loss_point_count": len(loss_history) if isinstance(loss_history, list) else 0,
+        },
+    )
+
+    predict_start = time.perf_counter()
+    y_pred = estimator.predict(X_test)
+    predict_duration_ms = (time.perf_counter() - predict_start) * 1000.0
+    pipeline_log.add(
+        "prediction_completed",
+        {
+            "prediction_count": int(len(y_pred)),
+            "predict_duration_ms": predict_duration_ms,
+        },
+    )
+
     score_info = ml_bridge.get_predict_scores(estimator, X_test)
     class_labels = None if task_type == TASK_REGRESSION else list(data.target_names)
     score_class_names = _score_class_names(task_type, score_info, data.target_names)
+    eval_start = time.perf_counter()
     evaluation = _jsonable(
         ml_bridge.evaluate(
             task_type,
@@ -156,7 +229,18 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
             class_labels=class_labels,
         )
     )
+    evaluation_duration_ms = (time.perf_counter() - eval_start) * 1000.0
     metrics = evaluation["metrics"]
+    allowed_metrics = (
+        REGRESSION_LOG_METRICS if task_type == TASK_REGRESSION else CLASSIFICATION_LOG_METRICS
+    )
+    pipeline_log.add(
+        "evaluation_completed",
+        {
+            "evaluation_duration_ms": evaluation_duration_ms,
+            "metrics": finite_scalar_metrics(metrics, allowed_metrics),
+        },
+    )
     confusion_matrix = evaluation.get("confusion_matrix")
     eval_class_labels = evaluation.get("class_labels")
     per_class_metrics = evaluation.get("per_class_metrics")
@@ -181,6 +265,23 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
             "per_class_metrics": per_class_metrics,
         }
 
+    # Real per-model explanation data (None for models without a faithful
+    # explanation in this phase). Failures propagate instead of storing
+    # invented values.
+    explanation_data = model_explanation.build_explanation_data(
+        model_name=experiment.model_name,
+        estimator=estimator,
+        X_train=X_train,
+        y_train=y_train,
+        X_test=X_test,
+        y_test=y_test,
+        y_pred=y_pred,
+        feature_names=feature_names,
+        random_state=experiment.random_state,
+    )
+    if explanation_data is not None:
+        training_info["explanation_data"] = _jsonable(explanation_data)
+
     charts: list[dict[str, Any]] = []
     artifact_subdir = str(experiment.id)
     artifact_dir = Path(get_settings().experiments_dir) / artifact_subdir
@@ -194,6 +295,14 @@ def _execute_pipeline(experiment: Experiment) -> dict[str, Any]:
         ]
     except Exception:  # charts are optional; keep the metrics result
         charts = []
+
+    pipeline_log.add(
+        "experiment_completed",
+        {
+            "total_duration_ms": pipeline_log.elapsed_ms(),
+        },
+    )
+    training_info["process_log"] = pipeline_log.entries()
 
     _write_summary(
         artifact_dir,

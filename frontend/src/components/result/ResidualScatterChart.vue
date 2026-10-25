@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
+import { useExportableChart } from './useExportableChart'
 import { regressionDiagnostics } from '@/utils/resultDiagnostics'
 
 const props = defineProps({
@@ -73,6 +74,15 @@ const { mount } = useChart(
   buildOption,
   () => props.active && hasData.value,
 )
+
+useExportableChart({
+  id: 'residual-scatter',
+  section: '回归表现',
+  title: '预测值与残差',
+  order: 2,
+  available: () => hasData.value,
+  buildOption,
+})
 
 watch(
   () => [props.yTrue, props.yPred],

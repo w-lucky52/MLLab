@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
+import { useExportableChart } from './useExportableChart'
 import { confidenceHistogram } from '@/utils/resultDiagnostics'
 
 const props = defineProps({
@@ -103,6 +104,15 @@ const { mount } = useChart(
   buildOption,
   () => props.active && hasData.value,
 )
+
+useExportableChart({
+  id: 'prediction-confidence',
+  section: '分类表现',
+  title: '预测置信度分布',
+  order: 4,
+  available: () => hasData.value,
+  buildOption,
+})
 
 watch(
   () => [props.yTrue, props.yPred, props.yScore, props.scoreType],

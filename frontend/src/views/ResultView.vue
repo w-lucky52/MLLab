@@ -5,9 +5,18 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, DataAnalysis, Download, RefreshRight, TrendCharts } from '@element-plus/icons-vue'
 
 import ClassificationPerformance from '@/components/result/ClassificationPerformance.vue'
+import ExportResultDialog from '@/components/result/ExportResultDialog.vue'
 import ModelExplanation from '@/components/result/ModelExplanation.vue'
 import RegressionPerformance from '@/components/result/RegressionPerformance.vue'
 import TrainingProcess from '@/components/result/TrainingProcess.vue'
+import { renderChartToPng } from '@/components/result/exportChartRender'
+import { clearChartProviders, getChartProviders } from '@/utils/exportRegistry'
+import {
+  buildZipEntries,
+  buildZipFilename,
+  filterAvailableProviders,
+  sortProviders,
+} from '@/utils/exportChartUtils'
 
 const route = useRoute()
 const router = useRouter()
@@ -172,9 +181,65 @@ const fetchExperiment = async () => {
   }
 }
 
+const exportDialogVisible = ref(false)
+const exportItems = ref([])
+const exportMeta = ref(null)
+const exportFailedCount = ref(0)
+const exportRootName = ref('')
+
 const exportResult = () => {
-  ElMessage.info('结果导出功能将在后续步骤接入')
+  const current = experiment.value
+  if (!current) return
+
+  const providers = getChartProviders()
+  const available = filterAvailableProviders(providers)
+  const sorted = sortProviders(available)
+  const entries = buildZipEntries(sorted)
+
+  const rendered = []
+  const failed = []
+  for (const entry of entries) {
+    const dataUrl = renderChartToPng(entry.provider.buildOption)
+    if (dataUrl) {
+      rendered.push({
+        section: entry.section,
+        title: entry.title,
+        dataUrl,
+        folder: entry.folder,
+        filename: entry.filename,
+      })
+    } else {
+      failed.push(entry.title)
+    }
+  }
+
+  if (rendered.length === 0) {
+    ElMessage.warning('当前实验暂无可导出的图表。')
+    return
+  }
+
+  exportRootName.value = buildZipFilename({
+    id: current.id,
+    datasetName: current.dataset_name,
+    modelName: current.model_name,
+  }).replace(/\.zip$/, '')
+
+  exportMeta.value = {
+    name: current.name || '',
+    datasetName: datasetName.value,
+    modelName: algorithmName.value,
+  }
+  exportItems.value = rendered
+  exportFailedCount.value = failed.length
+  exportDialogVisible.value = true
 }
+
+watch(exportDialogVisible, (visible) => {
+  if (!visible) {
+    exportItems.value = []
+    exportFailedCount.value = 0
+  }
+})
 
 onMounted(() => {
   fetchExperiment()
@@ -183,6 +248,7 @@ onMounted(() => {
 watch(
   () => route.params.id,
   () => {
+    clearChartProviders()
     experiment.value = null
     activeTab.value = 'performance'
     fetchExperiment()
@@ -191,6 +257,7 @@ watch(
 
 onBeforeUnmount(() => {
   clearTimeout(pollTimer)
+  clearChartProviders()
 })
 </script>
 
@@ -198,7 +265,7 @@ onBeforeUnmount(() => {
   <div class="result-page">
     <section class="page-heading">
       <div>
-        <span class="eyebrow">MODEL INSIGHTS</span>
+        <span class="eyebrow">模型洞察</span>
         <h1>实验结果分析</h1>
         <p>通过核心指标和可视化图表分析模型表现。</p>
       </div>
@@ -328,6 +395,14 @@ onBeforeUnmount(() => {
           </el-button>
         </div>
       </footer>
+
+      <ExportResultDialog
+        v-model="exportDialogVisible"
+        :meta="exportMeta"
+        :items="exportItems"
+        :failed-count="exportFailedCount"
+        :root-name="exportRootName"
+      />
     </template>
   </div>
 </template>
@@ -345,13 +420,13 @@ onBeforeUnmount(() => {
   color: white;
   border-radius: 20px;
   background:
-    radial-gradient(circle at 82% 10%, rgb(52 211 153 / 25%), transparent 30%),
-    linear-gradient(120deg, #064e3b, #047857);
-  box-shadow: 0 20px 45px rgb(5 150 105 / 14%);
+    radial-gradient(circle at 80% 10%, rgb(96 165 250 / 25%), transparent 30%),
+    linear-gradient(120deg, #172554, #1e40af);
+  box-shadow: 0 20px 45px rgb(30 64 175 / 14%);
 }
 
 .eyebrow {
-  color: #6ee7b7;
+  color: #93c5fd;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.8px;
@@ -364,7 +439,7 @@ onBeforeUnmount(() => {
 
 .page-heading p {
   margin: 0;
-  color: #d1fae5;
+  color: #cbd5e1;
 }
 
 .heading-icon {

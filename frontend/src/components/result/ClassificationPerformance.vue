@@ -1,9 +1,7 @@
 <script setup>
-import ClassDistributionChart from './ClassDistributionChart.vue'
 import ConfusionMatrixChart from './ConfusionMatrixChart.vue'
 import PerClassMetricsChart from './PerClassMetricsChart.vue'
 import PredictionConfidenceChart from './PredictionConfidenceChart.vue'
-import ResultInsight from './ResultInsight.vue'
 import RocCurveChart from './RocCurveChart.vue'
 
 const props = defineProps({
@@ -16,7 +14,7 @@ const field = (key) => props.evaluation?.[key] ?? null
 
 <template>
   <div class="classification-performance">
-    <div class="performance-row wide-left">
+    <div class="performance-row">
       <PerClassMetricsChart
         :per-class-metrics="field('per_class_metrics')"
         :score-classes="field('score_classes')"
@@ -24,16 +22,6 @@ const field = (key) => props.evaluation?.[key] ?? null
         :active="active"
       />
 
-      <ClassDistributionChart
-        :y-true="field('y_true')"
-        :y-pred="field('y_pred')"
-        :score-classes="field('score_classes')"
-        :score-class-names="field('score_class_names')"
-        :active="active"
-      />
-    </div>
-
-    <div class="performance-row">
       <ConfusionMatrixChart
         :confusion-matrix="field('confusion_matrix')"
         :class-labels="field('class_labels')"
@@ -41,7 +29,9 @@ const field = (key) => props.evaluation?.[key] ?? null
         :score-class-names="field('score_class_names')"
         :active="active"
       />
+    </div>
 
+    <div class="performance-row">
       <RocCurveChart
         :y-true="field('y_true')"
         :y-score="field('y_score')"
@@ -50,24 +40,13 @@ const field = (key) => props.evaluation?.[key] ?? null
         :score-class-names="field('score_class_names')"
         :active="active"
       />
-    </div>
 
-    <div class="performance-row wide-left align-start">
       <PredictionConfidenceChart
         :y-true="field('y_true')"
         :y-pred="field('y_pred')"
         :y-score="field('y_score')"
         :score-type="field('score_type')"
         :active="active"
-      />
-
-      <ResultInsight
-        :metrics="field('metrics')"
-        :per-class-metrics="field('per_class_metrics')"
-        :confusion-matrix="field('confusion_matrix')"
-        :class-labels="field('class_labels')"
-        :score-classes="field('score_classes')"
-        :score-class-names="field('score_class_names')"
       />
     </div>
   </div>
@@ -83,34 +62,31 @@ const field = (key) => props.evaluation?.[key] ?? null
 
 .performance-row {
   display: grid;
+  align-items: stretch;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
 .performance-row > * {
   min-width: 0;
-}
-
-.performance-row.wide-left {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-}
-
-.performance-row.align-start {
-  align-items: start;
+  height: 100%;
 }
 
 .classification-performance :deep(.chart) {
-  height: 330px;
+  height: 350px;
 }
 
 .classification-performance :deep(.chart-empty:not(.compact)) {
-  min-height: 330px;
+  min-height: 350px;
 }
 
 @media (max-width: 1100px) {
-  .performance-row,
-  .performance-row.wide-left {
-    grid-template-columns: 1fr;
+  .performance-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .performance-row > * {
+    height: auto;
   }
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
+import { useExportableChart } from './useExportableChart'
 import { buildBins, regressionDiagnostics } from '@/utils/resultDiagnostics'
 
 const props = defineProps({
@@ -103,6 +104,15 @@ const { mount } = useChart(
   buildOption,
   () => props.active && hasData.value,
 )
+
+useExportableChart({
+  id: 'residual-histogram',
+  section: '回归表现',
+  title: '残差分布',
+  order: 3,
+  available: () => hasData.value,
+  buildOption,
+})
 
 watch(
   () => [props.yTrue, props.yPred],

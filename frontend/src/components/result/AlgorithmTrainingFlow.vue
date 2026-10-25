@@ -4,10 +4,9 @@ import { getAlgorithmTrainingFlow } from '@/utils/training'
 
 const props = defineProps({
   modelName: { type: String, default: '' },
-  parameters: { type: Object, default: null },
 })
 
-const flow = computed(() => getAlgorithmTrainingFlow(props.modelName, props.parameters))
+const flow = computed(() => getAlgorithmTrainingFlow(props.modelName))
 </script>
 
 <template>
@@ -30,10 +29,6 @@ const flow = computed(() => getAlgorithmTrainingFlow(props.modelName, props.para
         <span v-if="index < flow.steps.length - 1" class="step-arrow" aria-hidden="true">→</span>
       </li>
     </ol>
-
-    <ul class="flow-notes">
-      <li v-for="note in flow.notes" :key="note">{{ note }}</li>
-    </ul>
   </el-card>
 </template>
 
@@ -108,35 +103,5 @@ const flow = computed(() => getAlgorithmTrainingFlow(props.modelName, props.para
   flex: none;
   color: #94a3b8;
   font-size: 13px;
-}
-
-.flow-notes {
-  padding: 12px 0 0;
-  margin: 0;
-  list-style: none;
-}
-
-.flow-notes li {
-  position: relative;
-  padding-left: 16px;
-  margin-bottom: 6px;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.flow-notes li:last-child {
-  margin-bottom: 0;
-}
-
-.flow-notes li::before {
-  position: absolute;
-  top: 8px;
-  left: 0;
-  width: 5px;
-  height: 5px;
-  content: '';
-  border-radius: 50%;
-  background: #3b82f6;
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useChart } from './useChart'
+import { useExportableChart } from './useExportableChart'
 import { regressionDiagnostics } from '@/utils/resultDiagnostics'
 
 const props = defineProps({
@@ -71,6 +72,15 @@ const { mount } = useChart(
   () => props.active && hasData.value,
 )
 
+useExportableChart({
+  id: 'top-absolute-errors',
+  section: '回归表现',
+  title: '绝对误差最大的样本',
+  order: 4,
+  available: () => hasData.value,
+  buildOption,
+})
+
 watch(
   () => [props.yTrue, props.yPred],
   () => {
@@ -89,7 +99,7 @@ watch(
           <p>按绝对误差降序排列，最多展示 10 个测试样本</p>
         </div>
 
-        <el-tag v-if="hasData" effect="plain" round>Top {{ rows.length }}</el-tag>
+        <el-tag v-if="hasData" effect="plain" round>前 {{ rows.length }} 个</el-tag>
       </div>
     </template>
 
